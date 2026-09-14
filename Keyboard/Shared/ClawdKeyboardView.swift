@@ -15,9 +15,14 @@ final class ClawdKeyboardView: UIView {
         didSet { refreshDynamicTitles() }
     }
     /// 地球键 / 长按切输入法
+    ///
+    /// 长按走的是 `advanceToNextInputMode()`（切下一个），不是
+    /// `handleInputModeList(from:with:)`（弹列表）。后者要一个真的 UIEvent，
+    /// 官方做法是把触发键做成 UIControl 再 `addTarget(_:action:for: .allTouchEvents)`，
+    /// 让 UIKit 自己把 view 和 event 递进来；光靠 touchesBegan 拿不到，也没有
+    /// 官方途径手搓 UIEvent，社区里照抄那个写法有 SIGQUIT 崩溃的报告。
+    /// 要真弹列表得把 KeyView 改成 UIControl —— 那是另一件事，先不为它冒险。
     var onNextKeyboard: (() -> Void)?
-    /// 长按「中英」要弹系统输入法列表
-    var onInputModeList: (() -> Void)?
     /// 收起键盘
     var onDismiss: (() -> Void)?
     /// 按键音
@@ -147,14 +152,20 @@ final class ClawdKeyboardView: UIView {
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let point = touches.first?.location(in: self),
               let index = index(at: point) else { return }
+
+        // action 必须先取走再 press：press → handle → 切页 rebuild() 会把
+        // keyViews 整个换成新页的数组，之后再用旧 index 下标就崩。
+        // 点第四行表情键就是这条：字母页 34 键、index 29，切到表情页只剩 28 键。
+        let action = keyViews[index].spec.action
         press(index)
 
         // 退格长按连删：先等一下再开始重复，不然轻点会多删
-        if keyViews[index].spec.action == .backspace {
+        if action == .backspace {
             startBackspaceRepeat()
         }
-        // 「中英」长按 = 切输入法。地球键是按下即切，不能再挂长按，不然一次按出两次
-        if keyViews[index].spec.action == .toggleLanguage {
+        // 「中英」长按 = 切下一个输入法。地球键是按下即切，不能再挂长按，
+        // 不然一次按出两次。只有一套输入法时没得切，也就不起计时器
+        if action == .toggleLanguage, needsInputModeSwitchKey {
             startInputModeTimer()
         }
     }
@@ -236,7 +247,13 @@ final class ClawdKeyboardView: UIView {
     private func startInputModeTimer() {
         stopInputModeTimer()
         inputModeTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
-            self?.onNextKeyboard?()
+            guard let self else { return }
+            // 长按是「换输入法」，不该顺带把标点模式翻掉 —— 按下的那一瞬间
+            // perform(.toggleLanguage) 已经翻过一次了，这里翻回来。
+            // 用户换完输入法再切回来，标点还是他原来那个模式。
+            self.chinesePunctuation.toggle()
+            self.rebuild()
+            self.onNextKeyboard?()
         }
         if let t = inputModeTimer { RunLoop.main.add(t, forMode: .common) }
     }

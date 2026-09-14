@@ -106,7 +106,9 @@ targets:
           NSExtensionAttributes:
             IsASCIICapable: true
             PrefersRightToLeft: false
-            PrimaryLanguage: zh-Hans
+            # 引擎目前只出 ASCII（拼音引擎是另一个量级的工程）。声明 zh-Hans 会把自己
+            # 塞进用户的中文输入法列表里，切过来发现打不出一个汉字，上架也留把柄。
+            PrimaryLanguage: en-US
             # 想让它连状态服务器就得开完全访问；用户不授权也能用，只是只能对打字有反应
             RequestsOpenAccess: true
     settings:

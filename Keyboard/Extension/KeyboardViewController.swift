@@ -7,6 +7,8 @@ final class KeyboardViewController: UIInputViewController, UIInputViewAudioFeedb
 
     private var keyboard: ClawdKeyboardView?
     private var heightConstraint: NSLayoutConstraint?
+    /// Claude Code 的状态轮询（只在键盘可见时跑）
+    private var stateTimer: Timer?
 
     /// 有了这个 + 返回 true，UIDevice.playInputClick() 才有声音
     var enableInputClicksWhenVisible: Bool { true }
@@ -43,6 +45,22 @@ final class KeyboardViewController: UIInputViewController, UIInputViewAudioFeedb
         super.viewWillAppear(animated)
         keyboard?.needsInputModeSwitchKey = needsInputModeSwitchKey
         bindProxy()
+
+        // 键盘不收起就一直挂着，而 Claude Code 的状态随时会变。
+        // 只在 viewDidAppear 读一次的话，键盘开着的时候 Clawd 永远停在
+        // 打开那一刻的姿势上。5 秒一刷，够用又不费电。
+        stateTimer?.invalidate()
+        let t = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            self?.refreshExternalState()
+        }
+        RunLoop.main.add(t, forMode: .common)
+        stateTimer = t
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        stateTimer?.invalidate()
+        stateTimer = nil
     }
 
     override func textDidChange(_ textInput: UITextInput?) {

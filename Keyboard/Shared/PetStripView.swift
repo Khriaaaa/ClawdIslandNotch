@@ -59,18 +59,29 @@ final class PetStripView: UIView {
     // MARK: - 尺寸
 
     /// 螃蟹比圆形按钮（29.3）略大一圈，像个角色而不像第五颗按钮
-    private var spriteHeight: CGFloat { max(18, KeyboardMetrics.stripHeight - 8) }
+    private var naturalHeight: CGFloat { max(18, KeyboardMetrics.stripHeight - 8) }
     private var spriteAspect: CGFloat {
         guard let image = spriteView.image, image.size.height > 0 else { return 1.6 }
         return image.size.width / image.size.height
     }
-    private var spriteWidth: CGFloat { spriteHeight * spriteAspect }
     private var minX: CGFloat { KeyboardMetrics.toolSideInset }
-    /// 右边界到按钮组跟前为止，还要留 8pt 别贴着
-    private var maxX: CGFloat {
+    /// 精灵左边缘能走的横向行程：从左内缩一直走到工具按钮组跟前（留 8pt 别贴着）
+    private var travel: CGFloat {
         let groupStart = KeyboardMetrics.toolGroupStart(totalWidth: bounds.width)
-        return max(minX, groupStart - 8 - spriteWidth)
+        return max(0, groupStart - 8 - minX)
     }
+    /// 320pt 这类窄屏上行程只有 ~116pt，而按原始比例算下来身宽 ~62pt，
+    /// 走完一个来回也挪不出一个身位，看着就是在原地抖。走动是这只角色的
+    /// 主要性格，静止或抖动都不如把它缩小 —— 身宽封在行程的一半，至少能
+    /// 挪完一个完整的自己。375pt 上行程 171pt，不触发封顶，尺寸跟原来一样。
+    private var spriteWidth: CGFloat {
+        let natural = naturalHeight * spriteAspect
+        guard travel > 0, natural > travel / 2 else { return natural }
+        return max(24, travel / 2)
+    }
+    private var spriteHeight: CGFloat { spriteWidth / max(spriteAspect, 0.01) }
+    /// 右边界到按钮组跟前为止
+    private var maxX: CGFloat { max(minX, minX + max(0, travel - spriteWidth)) }
 
     // MARK: - 生命周期
 
