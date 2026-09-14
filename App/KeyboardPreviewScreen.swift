@@ -83,28 +83,48 @@ struct KeyboardHostView: UIViewRepresentable {
         // 那条路径从来没被跑过 —— pi 第三轮抓到的越界崩就是这么漏出去的。
         // 打开 CLAWD_KB_SELFTEST=1 就让宿主真的走一遍那段代码，结果落盘给 CI 读。
         if ProcessInfo.processInfo.environment["CLAWD_KB_SELFTEST"] == "1" {
-            let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
-                .first?.appendingPathComponent("selftest.txt")
+            // 别用 try? 吞错误。全新安装时 Documents 目录可能还没建出来，第一次写盘
+            // 会失败而没人知道 —— 那份文件于是等到第二段才带着三行一起冒出来，
+            // CI 把「等第一行」等成了「等第三行」，shot-6 拍的是关掉地球那版。
+            // 建目录 + 不吞错，写不进去就让 CI 等超时变红。
+            let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            if let docs {
+                try? FileManager.default.createDirectory(at: docs, withIntermediateDirectories: true)
+            }
+            let url = docs?.appendingPathComponent("selftest.txt")
+            let goURL = docs?.appendingPathComponent("selftest-go2")
             var lines: [String] = []
             func flush() {
                 guard let url else { return }
-                try? lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+                do { try lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8) }
+                catch { NSLog("Clawd 自检落盘失败：\(error)") }
             }
-
-            // 第一段跑完停在表情页（底行带地球），CI 中间那张截图就拍这个时间点
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                lines.append(contentsOf: view.runEmojiTapSelfTest())
-                flush()
-            }
-            // 第二段留 10 秒空档，好让两张截图都拍得到；末行才是终判，CI 只认这一行。
-            // 判定用白名单，不是「找 SELFTEST FAIL」：后者是张已知失败清单，以后再加
-            // 一段自检、返回一句别的失败文本（SELFTEST ABORT …），它没在清单里，
-            // 判定会算成 PASS —— 那就又是假绿灯了。
-            DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
+            // 末行是终判，CI 只认这一行。判定用白名单，不是「找 SELFTEST FAIL」：
+            // 后者是张已知失败清单，以后再加一段自检、返回一句别的失败文本
+            // （SELFTEST ABORT …），它没在清单里，判定会算成 PASS —— 又是假绿灯。
+            func runSecondAndVerdict() {
                 lines.append(contentsOf: view.runGlobeRecheckSelfTest())
                 let ok = !lines.isEmpty && lines.allSatisfy { $0.hasPrefix("SELFTEST OK") }
                 lines.append("SELFTEST VERDICT " + (ok ? "PASS" : "FAIL"))
                 flush()
+            }
+            // 第二段由 CI 放信号文件触发，不靠秒数。用计时器的话，第一次写盘要是慢了，
+            // CI 等到第一行时第二段可能已经跑完，shot-6 拍到的就是关掉地球那版 ——
+            // 信号握手之后，shot-6 必然拍在第二段之前。
+            func waitForGo() {
+                guard let goURL else { return }
+                if FileManager.default.fileExists(atPath: goURL.path) {
+                    runSecondAndVerdict()
+                    return
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { waitForGo() }
+            }
+
+            // 第一段跑完停在表情页（底行带地球），CI 等的就是这一行、拍的也是这个状态
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                lines.append(contentsOf: view.runEmojiTapSelfTest())
+                flush()
+                waitForGo()
             }
         }
         return view

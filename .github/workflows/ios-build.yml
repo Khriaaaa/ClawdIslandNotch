@@ -207,7 +207,8 @@ jobs:
           # （模拟器服务抽风、app 被占着），旧文件会留下来给这次顶包，所以再删一次
           CONT=$(xcrun simctl get_app_container "$D" com.clawd.island data)
           F="$CONT/Documents/selftest.txt"
-          rm -f "$F"
+          GO="$CONT/Documents/selftest-go2"
+          rm -f "$F" "$GO"
           SIMCTL_CHILD_CLAWD_KB_SELFTEST=1 xcrun simctl launch "$D" com.clawd.island || echo "launch 失败"
           # 截图钩在证据上，不钩在秒数上：文件是在 rebuild() 之后才写的，
           # 「文件里有这一行」就等于「屏上已经是那一版」。原来是 sleep 6 / sleep 16，
@@ -225,11 +226,17 @@ jobs:
             echo "等不到「$3」（$1）—— 自检没跑到，或点表情键又越界崩了"
             exit 1
           }
-          wait_line "^SELFTEST OK " 20 "第一段：点表情键切到表情页"
-          sleep 1
+          wait_line "^SELFTEST OK " 60 "第一段：点表情键切到表情页"
+          sleep 2
           xcrun simctl io "$D" screenshot shot-6-keyboard-emoji.png
+          # 第二段由这个文件触发，不靠秒数 —— 这样 shot-6 必然是「第二段之前」那一版。
+          # 上一版用 10 秒计时器，第一次写盘慢了（全新安装时 Documents 还没建出来），
+          # 文件是第二段写的时候才带着三行一起出现的，CI 把「等第一行」等成了
+          # 「等第三行」，两张图一模一样而 job 照样绿。信号握手堵的就是这条。
+          mkdir -p "$CONT/Documents"
+          touch "$GO"
           wait_line "^SELFTEST VERDICT " 40 "第二段：关掉地球后的终判"
-          sleep 1
+          sleep 2
           xcrun simctl io "$D" screenshot shot-7-keyboard-emoji-noglobe.png
           ls -lh shot-6-keyboard-emoji.png shot-7-keyboard-emoji-noglobe.png
           echo "=== 自检结果 ==="
