@@ -29,8 +29,8 @@ struct KeyboardPreviewScreen: View {
                     }
 
                     HStack(spacing: 14) {
-                        Label("活动条 \\(Int(KeyboardMetrics.stripHeight))pt", systemImage: "ruler")
-                        Label("键盘总高 \\(Int(KeyboardMetrics.totalHeight))pt", systemImage: "keyboard")
+                        Label("活动条 \(Int(KeyboardMetrics.stripHeight))pt", systemImage: "ruler")
+                        Label("键盘总高 \(Int(KeyboardMetrics.totalHeight))pt", systemImage: "keyboard")
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
