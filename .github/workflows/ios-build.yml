@@ -1,4 +1,4 @@
-name: iOS Build
+name: iOS Build + 模拟器截图
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -16,7 +16,8 @@ jobs:
         run: |
           sw_vers
           xcodebuild -version
-          xcodebuild -showsdks | grep -i ios | head -5
+          echo "=== 可用模拟器（前 40 行）==="
+          xcrun simctl list devices available | head -40
 
       - name: 安装 XcodeGen
         run: brew install xcodegen
@@ -24,7 +25,7 @@ jobs:
       - name: 生成工程
         run: xcodegen generate
 
-      - name: 编译（不签名）
+      - name: 真机编译（不签名）
         run: |
           set +e
           xcodebuild \
@@ -37,31 +38,101 @@ jobs:
             build > build.log 2>&1
           rc=$?
           echo "xcodebuild 退出码: $rc"
-          echo "=== 日志尾部 ==="
-          tail -30 build.log
+          tail -20 build.log
           if [ $rc -ne 0 ]; then
             echo "=== 编译错误（去重）==="
-            grep -E "error: " build.log | sort -u | head -80
+            grep -E "error: " build.log | sort -u | head -60
             exit $rc
           fi
-          echo "=== 警告（去重，仅记录）==="
+          echo "=== 警告（去重）==="
           grep -E "warning: " build.log | sort -u | head -20
 
       - name: 打包未签名 ipa
-        if: success()
         run: |
           APP=build/Build/Products/Debug-iphoneos/ClawdIsland.app
-          ls -la "$APP"
           mkdir -p Payload
           cp -R "$APP" Payload/
           ditto -c -k --sequesterRsrc --keepParent Payload ClawdIsland-unsigned.ipa
           ls -lh ClawdIsland-unsigned.ipa
 
+      - name: 挑一台刘海机型模拟器
+        id: sim
+        run: |
+          set -e
+          LIST=$(xcrun simctl list devices available)
+          for NAME in "iPhone 16e" "iPhone 16 Plus" "iPhone 14" "iPhone 13" "iPhone SE (3rd generation)"; do
+            LINE=$(echo "$LIST" | grep -m1 -F "$NAME (" || true)
+            if [ -n "$LINE" ]; then
+              UDID=$(echo "$LINE" | sed -n 's/.*(\([0-9A-F-]\{36\}\)).*/\1/p' | head -1)
+              if [ -n "$UDID" ]; then
+                echo "选中: $NAME ($UDID)"
+                echo "device=$UDID" >> "$GITHUB_OUTPUT"
+                echo "name=$NAME" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            fi
+          done
+          echo "没找到刘海机型，退回任意 iPhone"
+          LINE=$(echo "$LIST" | grep -m1 "iPhone " || true)
+          UDID=$(echo "$LINE" | sed -n 's/.*(\([0-9A-F-]\{36\}\)).*/\1/p' | head -1)
+          echo "device=$UDID" >> "$GITHUB_OUTPUT"
+          echo "name=fallback" >> "$GITHUB_OUTPUT"
+
+      - name: 启动模拟器
+        run: |
+          D="${{ steps.sim.outputs.device }}"
+          echo "device=$D"
+          xcrun simctl boot "$D" || true
+          xcrun simctl bootstatus "$D" -b
+
+      - name: 编译模拟器版并安装
+        run: |
+          set +e
+          D="${{ steps.sim.outputs.device }}"
+          xcodebuild \
+            -project ClawdIsland.xcodeproj \
+            -scheme ClawdIsland \
+            -configuration Debug \
+            -destination "id=$D" \
+            -derivedDataPath build-sim \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build > build-sim.log 2>&1
+          rc=$?
+          echo "模拟器编译退出码: $rc"
+          tail -15 build-sim.log
+          if [ $rc -ne 0 ]; then grep -E "error: " build-sim.log | sort -u | head -40; exit $rc; fi
+          APP=build-sim/Build/Products/Debug-iphonesimulator/ClawdIsland.app
+          ls -la "$APP"
+          xcrun simctl install "$D" "$APP"
+          xcrun simctl launch "$D" com.clawd.island || echo "launch 失败"
+          sleep 12
+          xcrun simctl io "$D" screenshot shot-1-status.png
+          xcrun simctl openurl "$D" clawdisland://notch || echo "openurl 失败"
+          sleep 8
+          xcrun simctl io "$D" screenshot shot-2-notch.png
+          ls -lh *.png
+
+      - name: 失败时抓崩溃日志
+        if: failure()
+        run: |
+          find ~/Library/Logs/DiagnosticReports -name "*.ips" -newermt "-15 minutes" 2>/dev/null | head -5 | while read f; do
+            echo "===== $f"; head -80 "$f"
+          done || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: "*.png"
+          retention-days: 14
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: build-log
-          path: build.log
+          path: |
+            build.log
+            build-sim.log
           retention-days: 14
 
       - uses: actions/upload-artifact@v4
