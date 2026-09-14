@@ -16,6 +16,9 @@ struct ContentView: View {
             SettingsView()
                 .tag(2)
                 .tabItem { Label("设置", systemImage: "gearshape.fill") }
+            KeyboardPreviewScreen()
+                .tag(3)
+                .tabItem { Label("键盘", systemImage: "keyboard") }
         }
         // 锁屏小组件 / 实时活动里的 widgetURL 落到这里。
         .onOpenURL { url in

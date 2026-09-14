@@ -43,6 +43,9 @@ targets:
       - path: Core
       - path: Shared
       - path: Resources
+      # 键盘 UI 是共享代码：扩展拿它当真键盘，App 拿同一份做预览页（CI 截图靠它）
+      - path: Keyboard/Shared
+      - path: Keyboard/Sprites
     info:
       path: App/Info.plist
       properties:
@@ -75,6 +78,36 @@ targets:
       - target: ClawdWidgetExtension
         embed: true
         codeSign: true
+      - target: ClawdKeyboard
+        embed: true
+        codeSign: true
+
+  ClawdKeyboard:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Keyboard/Shared
+      - path: Keyboard/Extension
+      - path: Keyboard/Sprites
+    info:
+      path: Keyboard/Info.plist
+      properties:
+        CFBundleDisplayName: Clawd 键盘
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.keyboard-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
+          NSExtensionAttributes:
+            IsASCIICapable: true
+            PrefersRightToLeft: false
+            PrimaryLanguage: zh-Hans
+            # 想让它连状态服务器就得开完全访问；用户不授权也能用，只是只能对打字有反应
+            RequestsOpenAccess: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.clawd.island.keyboard
+        SKIP_INSTALL: YES
 
   ClawdWidgetExtension:
     type: app-extension

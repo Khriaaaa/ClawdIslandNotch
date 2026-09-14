@@ -161,6 +161,34 @@ jobs:
           xcrun simctl io "$D" screenshot shot-4-settings.png
           ls -lh shot-4-settings.png
 
+      - name: 功能 5 —— 截图「键盘」预览页（键盘扩展那块视图原样跑在 App 里）
+        run: |
+          set -e
+          D="${{ steps.sim.outputs.device }}"
+          python3 - <<'PY'
+          p = "App/ContentView.swift"
+          s = open(p, encoding="utf-8").read()
+          assert "@State private var selection = 2" in s, "找不到 selection 锚点"
+          open(p, "w", encoding="utf-8").write(
+              s.replace("@State private var selection = 2",
+                        "@State private var selection = 3", 1))
+          print("已把初始 tab 改成 3（键盘）")
+          PY
+          xcodebuild -project ClawdIsland.xcodeproj -scheme ClawdIsland -configuration Debug \
+            -destination "id=$D" -derivedDataPath build-sim-kb \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build > build-sim-kb.log 2>&1
+          tail -6 build-sim-kb.log
+          echo "=== 确认键盘扩展被打进了 App ==="
+          ls -d build-sim-kb/Build/Products/Debug-iphonesimulator/ClawdIsland.app/PlugIns/*.appex || echo "没有 appex"
+          plutil -p build-sim-kb/Build/Products/Debug-iphonesimulator/ClawdIsland.app/PlugIns/ClawdKeyboard.appex/Info.plist 2>/dev/null | grep -i -A2 NSExtensionPointIdentifier || true
+          xcrun simctl terminate "$D" com.clawd.island || true
+          xcrun simctl install "$D" build-sim-kb/Build/Products/Debug-iphonesimulator/ClawdIsland.app
+          xcrun simctl launch "$D" com.clawd.island || echo "launch 失败"
+          sleep 16
+          xcrun simctl io "$D" screenshot shot-5-keyboard.png
+          ls -lh shot-5-keyboard.png
+
       - name: 失败时抓崩溃日志
         if: failure()
         run: |
@@ -184,6 +212,7 @@ jobs:
             build-sim.log
             build-sim-notch.log
             build-sim-set.log
+            build-sim-kb.log
           retention-days: 14
 
       - uses: actions/upload-artifact@v4
