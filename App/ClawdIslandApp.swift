@@ -179,7 +179,8 @@ final class ClawdCoordinator: ObservableObject {
 
     func handle(_ event: ClawdEvent) {
         // 收条先写：CI 靠它证明状态真的进了这个 App，而不是进了隔壁模拟器那台。
-        Self.recordReceived(event)
+        // 注意别写成 `Self.` —— 这里是 ClawdCoordinator，收条挂在 ClawdIslandApp 上。
+        ClawdIslandApp.recordReceived(event)
         events = ClawdStore.append(event)
 
         if let sid = event.sessionId, !sid.isEmpty {
