@@ -77,7 +77,11 @@ struct StatusTab: View {
                 Label(coordinator.snapshot.agentId.isEmpty ? "未知来源" : coordinator.snapshot.agentId,
                       systemImage: "person.crop.circle")
                 Label {
-                    Text(coordinator.snapshot.updatedAt, style: .relative)
+                    if coordinator.snapshot.updatedAt == Date(timeIntervalSince1970: 0) {
+                        Text("尚未收到推送")
+                    } else {
+                        Text(coordinator.snapshot.updatedAt, style: .relative)
+                    }
                 } icon: {
                     Image(systemName: "clock")
                 }

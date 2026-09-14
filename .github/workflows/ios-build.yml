@@ -1,4 +1,4 @@
-name: iOS Build + 模拟器截图
+name: iOS Build + 功能截图
 
 on:
   push:
@@ -73,7 +73,8 @@ jobs:
           xcrun simctl boot "$D" || true
           xcrun simctl bootstatus "$D" -b
 
-      - name: 编译模拟器版（原件）
+      # ---------- 功能 1：状态页（空态）+ 功能 2：外部推送驱动 ----------
+      - name: 编译模拟器版并截图「状态页」
         run: |
           set -e
           D="${{ steps.sim.outputs.device }}"
@@ -83,37 +84,82 @@ jobs:
             build > build-sim.log 2>&1
           tail -8 build-sim.log
           xcrun simctl install "$D" build-sim/Build/Products/Debug-iphonesimulator/ClawdIsland.app
-          xcrun simctl launch "$D" com.clawd.island
-          sleep 12
-          xcrun simctl io "$D" screenshot shot-1-status.png
-          ls -lh shot-1-status.png
+          xcrun simctl launch "$D" com.clawd.island || echo "launch 失败"
+          sleep 14
+          xcrun simctl io "$D" screenshot shot-1-status-empty.png
+          ls -lh shot-1-status-empty.png
 
-      - name: 截图 2 —— 强制初始 tab 为「刘海」（只改 CI 里的那份源码）
+      - name: 功能 2 —— 从外部推一条状态（WORKING / PreToolUse）
         run: |
           set -e
           D="${{ steps.sim.outputs.device }}"
-          grep -n "private var selection" App/ContentView.swift
-          sed -i 's/@State private var selection = 0/@State private var selection = 1/' App/ContentView.swift
-          grep -n "private var selection" App/ContentView.swift
-          xcodebuild -project ClawdIsland.xcodeproj -scheme ClawdIsland -configuration Debug \
-            -destination "id=$D" -derivedDataPath build-sim2 \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            build > build-sim2.log 2>&1
-          tail -6 build-sim2.log
-          xcrun simctl terminate "$D" com.clawd.island || true
-          xcrun simctl install "$D" build-sim2/Build/Products/Debug-iphonesimulator/ClawdIsland.app
-          xcrun simctl launch "$D" com.clawd.island
-          sleep 14
-          xcrun simctl io "$D" screenshot shot-2-notch.png
-          ls -lh shot-2-notch.png
-
-      - name: 深链注册检查（会弹系统确认框，属正常）
-        run: |
-          D="${{ steps.sim.outputs.device }}"
-          xcrun simctl openurl "$D" clawdisland://notch || echo "openurl 失败"
+          echo "=== 先看 payload ==="
+          python3 tools/send_state.py --dry-run --state working --event PreToolUse \
+            --session-title "重构支付模块" --tool-name "Bash"
+          echo "=== 真推 ==="
+          python3 tools/send_state.py --host 127.0.0.1 --state working --event PreToolUse \
+            --agent-id openclaw --hook-source send_state.py \
+            --session-id sess-ci-0001 --session-title "重构支付模块" \
+            --cwd "/Users/dev/pay" --tool-name "Bash" --tool-use-id toolu_ci_0001
           sleep 6
-          xcrun simctl io "$D" screenshot shot-3-deeplink.png || true
-          ls -lh *.png
+          echo "=== 再推一条（PostToolUse，会话继续）==="
+          python3 tools/send_state.py --host 127.0.0.1 --state working --event PostToolUse \
+            --agent-id openclaw --hook-source send_state.py \
+            --session-id sess-ci-0001 --session-title "重构支付模块" \
+            --cwd "/Users/dev/pay" --tool-name "Bash" --tool-use-id toolu_ci_0001 || echo "推送失败（不影响截图）"
+          sleep 8
+          xcrun simctl io "$D" screenshot shot-2-status-pushed.png
+          ls -lh shot-2-status-pushed.png
+
+      - name: 功能 3 —— 截图「刘海」页（只改 CI 里的那份源码的初始 tab）
+        run: |
+          set -e
+          D="${{ steps.sim.outputs.device }}"
+          python3 - <<'PY'
+          p = "App/ContentView.swift"
+          s = open(p, encoding="utf-8").read()
+          assert "@State private var selection = 0" in s, "找不到 selection 锚点"
+          open(p, "w", encoding="utf-8").write(
+              s.replace("@State private var selection = 0",
+                        "@State private var selection = 1", 1))
+          print("已把初始 tab 改成 1（刘海）")
+          PY
+          xcodebuild -project ClawdIsland.xcodeproj -scheme ClawdIsland -configuration Debug \
+            -destination "id=$D" -derivedDataPath build-sim-notch \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build > build-sim-notch.log 2>&1
+          tail -6 build-sim-notch.log
+          xcrun simctl terminate "$D" com.clawd.island || true
+          xcrun simctl install "$D" build-sim-notch/Build/Products/Debug-iphonesimulator/ClawdIsland.app
+          xcrun simctl launch "$D" com.clawd.island || echo "launch 失败"
+          sleep 14
+          xcrun simctl io "$D" screenshot shot-3-notch.png
+          ls -lh shot-3-notch.png
+
+      - name: 功能 4 —— 截图「设置」页
+        run: |
+          set -e
+          D="${{ steps.sim.outputs.device }}"
+          python3 - <<'PY'
+          p = "App/ContentView.swift"
+          s = open(p, encoding="utf-8").read()
+          assert "@State private var selection = 1" in s, "找不到 selection 锚点"
+          open(p, "w", encoding="utf-8").write(
+              s.replace("@State private var selection = 1",
+                        "@State private var selection = 2", 1))
+          print("已把初始 tab 改成 2（设置）")
+          PY
+          xcodebuild -project ClawdIsland.xcodeproj -scheme ClawdIsland -configuration Debug \
+            -destination "id=$D" -derivedDataPath build-sim-set \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build > build-sim-set.log 2>&1
+          tail -6 build-sim-set.log
+          xcrun simctl terminate "$D" com.clawd.island || true
+          xcrun simctl install "$D" build-sim-set/Build/Products/Debug-iphonesimulator/ClawdIsland.app
+          xcrun simctl launch "$D" com.clawd.island || echo "launch 失败"
+          sleep 14
+          xcrun simctl io "$D" screenshot shot-4-settings.png
+          ls -lh shot-4-settings.png
 
       - name: 失败时抓崩溃日志
         if: failure()
@@ -136,7 +182,8 @@ jobs:
           path: |
             build.log
             build-sim.log
-            build-sim2.log
+            build-sim-notch.log
+            build-sim-set.log
           retention-days: 14
 
       - uses: actions/upload-artifact@v4
