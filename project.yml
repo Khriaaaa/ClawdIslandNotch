@@ -1,0 +1,117 @@
+# XcodeGen 工程定义。
+#
+#   brew install xcodegen      # 或见 README 的安装方式
+#   cd ClawdIsland && xcodegen generate
+#
+# 会生成 ClawdIsland.xcodeproj，包含两个 target：
+#   ClawdIsland           —— App（@main ClawdIslandApp）
+#   ClawdWidgetExtension  —— Widget 扩展（@main ClawdWidgetBundle，含灵动岛/锁屏/主屏小组件）
+#
+# App Group 固定为 group.com.clawd.island.clawd，两个 target 的 entitlements 里都声明了。
+# 如果你改 bundle id，记得同时改这里的 entitlements、Core/ClawdStore.swift 的 appGroupID，
+# 以及 Xcode 里两个 target 的 Signing & Capabilities。
+
+name: ClawdIsland
+
+options:
+  bundleIdPrefix: com.clawd.island
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    CODE_SIGN_STYLE: Automatic
+    TARGETED_DEVICE_FAMILY: "1"
+    # 真机跑必须有自己的 Team。命令行没配也没关系，Xcode 里选一下即可。
+    # DEVELOPMENT_TEAM: XXXXXXXXXX
+
+targets:
+
+  ClawdIsland:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+        excludes:
+          - "Info.plist"
+          - "*.entitlements"
+      - path: Core
+      - path: Shared
+      - path: Resources
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Clawd Island
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        # 实时活动开关（BRIEF 第五节要求）
+        NSSupportsLiveActivities: true
+        NSSupportsLiveActivitiesFrequentUpdates: true
+        # iOS 14+ 局域网监听/连接需要用户授权说明
+        NSLocalNetworkUsageDescription: "Clawd Island 在本地网络监听外部代理推送的桌宠状态。"
+        # 锁屏小组件 / 实时活动里的 widgetURL 深链（Shared/NotchDeepLink.swift）
+        CFBundleURLTypes:
+          - CFBundleURLName: com.clawd.island.notch
+            CFBundleURLSchemes:
+              - clawdisland
+    entitlements:
+      path: App/ClawdIsland.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.clawd.island.clawd
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.clawd.island
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    dependencies:
+      - target: ClawdWidgetExtension
+        embed: true
+        codeSign: true
+
+  ClawdWidgetExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widget
+        excludes:
+          - "Info.plist"
+          - "*.entitlements"
+      - path: Core
+      - path: Shared
+      - path: Resources
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: Clawd
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        NSSupportsLiveActivities: true
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Widget/ClawdWidgetExtension.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.clawd.island.clawd
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.clawd.island.widget
+        SKIP_INSTALL: YES
+
+schemes:
+  ClawdIsland:
+    build:
+      targets:
+        ClawdIsland: all
+    run:
+      config: Debug
+    archive:
+      config: Release
