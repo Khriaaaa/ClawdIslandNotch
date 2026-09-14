@@ -16,6 +16,14 @@ DOC=$2
 PREFIX=$3
 A="$DOC/la-applied.txt"
 
+# SHOT_BACKGROUND=1：灵动岛紧凑态模式。
+# 推送必须在 App 前台时发 —— iOS 会把后台 App 的网络挂起，推了也进不了端口
+#（上一版 CI 就是先切后台再推，16 态一条都没生效）。
+# 所以这个模式下每轮先把它拉回前台、推、等它认下，再切到设置 App 退到后台截图
+#（App 在前台时，灵动岛不显示它自己的实时活动）。
+# 默认 0：App 一直前台，拍 App 自己的页面。
+BG=${SHOT_BACKGROUND:-0}
+
 STATES="idle roam yawning dozing collapsing thinking working juggling sweeping error attention notification carrying sleeping waking dizzy"
 FAIL=""
 N=0
@@ -26,6 +34,12 @@ for S in $STATES; do
 
   # LA APPLIED 是追加写的，不清掉就会读到上一轮那条，等于自欺。
   rm -f "$A"
+
+  if [ "$BG" = "1" ]; then
+    # 先回前台再推：后台的 App 收不到（见文件头）
+    xcrun simctl launch "$UDID" com.clawd.island >/dev/null 2>&1
+    sleep 2
+  fi
 
   python3 tools/send_state.py --host 127.0.0.1 --state "$S" --event PreToolUse \
     --agent-id openclaw --hook-source send_state.py \
@@ -45,6 +59,12 @@ for S in $STATES; do
   if [ "$OK" -ne 1 ]; then
     FAIL="$FAIL $S"
     echo "  状态 $S 等 15s 没被应用。标记现有内容：$(tr '\n' '|' < "$A" 2>/dev/null)"
+  fi
+
+  if [ "$BG" = "1" ]; then
+    # 退到后台：灵动岛这时才显示紧凑态，而且停在上一次 update 的状态上
+    xcrun simctl launch "$UDID" com.apple.Preferences >/dev/null 2>&1
+    sleep 2.5
   fi
 
   sleep 1.2   # 让图标那点弹簧缩放落定，别拍在半路上
