@@ -21,7 +21,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 CATALOG="Resources/Assets.xcassets"
 BUDGET="${BUDGET:-5000}"     # 要大于最长的一次性动画（3.8s），否则烘到一半
-HI="${HI:-864}"              # 先渲这么大，再降采样出 1x/2x/3x
+HI="${HI:-1800}"             # 先渲这么大，再降采样出 1x/2x/3x
 BASE="${BASE:-144}"          # 1x 点尺寸，与现有资产一致（3x = 432）
 PY="${PYTHON:-python3}"
 
@@ -38,21 +38,46 @@ for svg in svg-src/clawd-*.svg; do
   set="$CATALOG/$name.imageset"
   [ -d "$set" ] || { echo "跳过没有 imageset 的 $name"; continue; }
 
+  # SVG 里写死了 width="500" height="500"，光把窗口开大内容不会跟着变大
+  # （实测 864 窗口里蟹体只占 ~210px）。先把这两个属性换成渲染尺寸再渲。
+  sed "s/width=\"500\" height=\"500\"/width=\"$HI\" height=\"$HI\"/" "$svg" > "$TMP/$name.svg"
+
   chromium --headless --no-sandbox --disable-gpu --hide-scrollbars \
     --force-device-scale-factor=1 \
     --default-background-color=00000000 \
     --virtual-time-budget="$BUDGET" \
     --window-size="$HI,$HI" \
-    --screenshot="$TMP/$name.png" "file://$PWD/$svg" >/dev/null 2>&1
+    --screenshot="$TMP/$name.png" "file://$TMP/$name.svg" >/dev/null 2>&1
 
   [ -s "$TMP/$name.png" ] || { echo "渲染失败：$name" >&2; exit 1; }
 
-  # 降采样出三档。渲染时窗口是正方形，SVG 的 viewBox 也是正方形，几何与旧资产一致。
+  # 裁切 + 降采样出三档。
+  #
+  # 裁切这一步不能省，而且不能交给 librsvg —— 旧资产就是 rsvg-convert 渲的，
+  # 它对 CSS transform-origin 的解释和浏览器不一致：dozing 那双靠 scaleY(0.1)
+  # 压扁的眼睛被甩到了身体上方，再按「内容 bbox」裁切，错误就被切成定局
+  #（眼睛贴在图顶、身体被缩小下移，钳子也跟着没了）。
   "$PY" - "$TMP/$name.png" "$set/$name" "$BASE" <<'PY'
 import sys
 from PIL import Image
 src, stem, base = sys.argv[1], sys.argv[2], int(sys.argv[3])
 im = Image.open(src).convert("RGBA")
+
+# 按内容 bbox 做方形裁切、留 10% 边距：位置要按真实内容算，
+# 否则眼睛一旦出错，裁切框会跟着错误一起走，把 bug 固化成构图。
+box = im.getchannel("A").point(lambda v: 255 if v > 8 else 0).getbbox()
+if not box:
+    sys.exit(f"{stem} 渲出来是全透明的，拒绝覆盖")
+x0, y0, x1, y1 = box
+side = max(x1 - x0, y1 - y0) * 1.1
+half = side / 2
+cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+l, t = round(cx - half), round(cy - half)
+r, b = l + round(side), t + round(side)
+canvas = Image.new("RGBA", (r - l, b - t), (0, 0, 0, 0))
+canvas.paste(im, (-l, -t))
+im = canvas
+
 for tag, mul in (("1x", 1), ("2x", 2), ("3x", 3)):
     px = base * mul
     out = im.resize((px, px), Image.LANCZOS) if im.size != (px, px) else im
