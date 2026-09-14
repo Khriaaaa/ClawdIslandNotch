@@ -96,12 +96,14 @@ struct KeyboardHostView: UIViewRepresentable {
                 lines.append(contentsOf: view.runEmojiTapSelfTest())
                 flush()
             }
-            // 第二段留 10 秒空档，好让两张截图都拍得到；末行才是终判，
-            // CI 只认这一行 —— 前面两行是给人看的。
+            // 第二段留 10 秒空档，好让两张截图都拍得到；末行才是终判，CI 只认这一行。
+            // 判定用白名单，不是「找 SELFTEST FAIL」：后者是张已知失败清单，以后再加
+            // 一段自检、返回一句别的失败文本（SELFTEST ABORT …），它没在清单里，
+            // 判定会算成 PASS —— 那就又是假绿灯了。
             DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
                 lines.append(contentsOf: view.runGlobeRecheckSelfTest())
-                lines.append("SELFTEST VERDICT "
-                             + (lines.contains { $0.hasPrefix("SELFTEST FAIL") } ? "FAIL" : "PASS"))
+                let ok = !lines.isEmpty && lines.allSatisfy { $0.hasPrefix("SELFTEST OK") }
+                lines.append("SELFTEST VERDICT " + (ok ? "PASS" : "FAIL"))
                 flush()
             }
         }
