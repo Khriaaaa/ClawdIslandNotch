@@ -51,13 +51,17 @@ final class PetStripView: UIView {
 
     // MARK: - 尺寸
 
-    private var spriteHeight: CGFloat { max(18, bounds.height - 12) }
+    /// 螃蟹占满整条高度（不是缩到一半）—— 条高 44pt 时螃蟹约 68pt 宽，
+    /// 在原尺寸截图里 Clawd 就是差不多这个体量
+    private var spriteHeight: CGFloat { max(18, bounds.height - 2) }
     private var spriteAspect: CGFloat {
         guard let image = spriteView.image, image.size.height > 0 else { return 1.6 }
         return image.size.width / image.size.height
     }
     private var spriteWidth: CGFloat { spriteHeight * spriteAspect }
-    private var maxX: CGFloat { max(0, bounds.width - spriteWidth - 12) }
+    /// 只让它逛左半边 —— 用户圈的活动范围就是工具条靠左那一段，
+    /// 右半边留给状态文字，也顺手避免走动时糊在文字上
+    private var maxX: CGFloat { max(0, bounds.width * 0.5 - spriteWidth) }
 
     // MARK: - 生命周期
 
@@ -91,7 +95,7 @@ final class PetStripView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         position = min(position, maxX)
-        spriteView.frame = CGRect(x: position, y: bounds.height - spriteHeight - 4,
+        spriteView.frame = CGRect(x: position, y: 1,
                                   width: spriteWidth, height: spriteHeight)
         statusLabel.frame = CGRect(x: bounds.width * 0.35, y: 0,
                                    width: bounds.width * 0.65 - 12, height: bounds.height)
