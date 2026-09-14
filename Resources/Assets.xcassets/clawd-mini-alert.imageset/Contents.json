@@ -1,8 +1,19 @@
 {
   "images": [
     {
-      "filename": "clawd-mini-alert.png",
-      "idiom": "universal"
+      "filename": "clawd-mini-alert-1x.png",
+      "idiom": "universal",
+      "scale": "1x"
+    },
+    {
+      "filename": "clawd-mini-alert-2x.png",
+      "idiom": "universal",
+      "scale": "2x"
+    },
+    {
+      "filename": "clawd-mini-alert-3x.png",
+      "idiom": "universal",
+      "scale": "3x"
     }
   ],
   "info": {

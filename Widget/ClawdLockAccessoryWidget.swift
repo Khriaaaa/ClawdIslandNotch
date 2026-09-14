@@ -8,8 +8,8 @@ import SwiftUI
 /// （WidgetKit，iOS 16+，用户在锁屏自定义里添加）。
 ///
 /// 它们和灵动岛无关：刘海机型、灵动岛机型、甚至无刘海机型都支持。
-/// 锁屏上系统会统一做 vibrancy 处理，自定义彩色图会被压成单色/半透明，
-/// 想保留原色需要 iOS 18 的 `widgetRenderingMode` 一族，这里不引（部署目标是 iOS 17）。
+/// 锁屏上系统会统一做 vibrancy 处理，自定义彩色图会被压成单色/半透明；
+/// 想完全保留原色需要 iOS 18 的 widget accent 一族，部署目标是 iOS 17，这里不引。
 struct ClawdLockAccessoryWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "ClawdLockAccessoryWidget", provider: ClawdTimelineProvider()) { entry in
@@ -66,7 +66,9 @@ struct ClawdAccessoryView: View {
 
     private var rectangular: some View {
         HStack(spacing: 8) {
-            Image(snapshot.state.imageName)
+            // 用 52pt 的小图而不是 144pt 的大图：accessory 家族的图片分辨率预算
+            // 比主屏小组件紧得多（约 160x76pt），超预算的图会被换成灰方块。
+            Image(snapshot.state.islandGlyph)
                 .resizable()
                 .scaledToFit()
                 .frame(width: 32, height: 32)

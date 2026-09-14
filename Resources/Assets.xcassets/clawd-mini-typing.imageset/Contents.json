@@ -1,8 +1,19 @@
 {
   "images": [
     {
-      "filename": "clawd-mini-typing.png",
-      "idiom": "universal"
+      "filename": "clawd-mini-typing-1x.png",
+      "idiom": "universal",
+      "scale": "1x"
+    },
+    {
+      "filename": "clawd-mini-typing-2x.png",
+      "idiom": "universal",
+      "scale": "2x"
+    },
+    {
+      "filename": "clawd-mini-typing-3x.png",
+      "idiom": "universal",
+      "scale": "3x"
     }
   ],
   "info": {

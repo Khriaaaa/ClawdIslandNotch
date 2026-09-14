@@ -1,8 +1,19 @@
 {
   "images": [
     {
-      "filename": "clawd-sweeping.png",
-      "idiom": "universal"
+      "filename": "clawd-sweeping-1x.png",
+      "idiom": "universal",
+      "scale": "1x"
+    },
+    {
+      "filename": "clawd-sweeping-2x.png",
+      "idiom": "universal",
+      "scale": "2x"
+    },
+    {
+      "filename": "clawd-sweeping-3x.png",
+      "idiom": "universal",
+      "scale": "3x"
     }
   ],
   "info": {

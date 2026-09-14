@@ -69,7 +69,12 @@ enum ClawdState: String, CaseIterable, Codable, Identifiable, Hashable {
     var imageName: String { "clawd-\(rawValue)" }
 
     /// 小图（灵动岛 compact / minimal）。优先用 reference 里现成的 mini 素材，
-    /// 没有对应 mini 的状态就退回同名的迷你映射。资源全部是矢量 SVG，缩放不糊。
+    /// 没有对应 mini 的状态就退回同名的迷你映射。
+    ///
+    /// 注意：这些资源是栅格 PNG，不是矢量图。`Contents.json` 必须显式写
+    /// `scale`，否则 Xcode 按单倍图算，900px 就成了 900pt，超过灵动岛各面的
+    /// 图片分辨率预算，系统会把那块换成灰方块（不报错、不崩，最难查）。
+    /// 各面预算见 `ClawdGlyph` 的注释。
     var islandGlyph: String {
         switch self {
         case .idle: return "clawd-mini-idle"

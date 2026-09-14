@@ -110,36 +110,36 @@ struct ClawdLockScreenView: View {
 
 /// 统一的小图渲染：按 stateRaw 找资源名，找不到就退回睡眠图。
 /// `scaleEffect` 只做一次进场放大，不参与循环动画。
+///
+/// 图分两档，因为灵动岛每一面有自己的**图片分辨率预算**（Apple HIG
+/// live-activities 的 Specifications）：紧凑态/最小态只有 62.33x36.67pt。
+/// 超过预算的图系统不报错、不崩，只是把那块换成**灰色占位方块** ——
+/// 看上去像「宠物被去色/被压成灰疙瘩」，其实是图根本没被渲染。
+/// 所以紧凑态取 `clawd-di-*`（32pt），展开态与锁屏取 `clawd-mini-*`（52pt）。
 struct ClawdGlyph: View {
     let stateRaw: String
     let size: CGFloat
     @State private var appeared = false
 
+    /// 紧凑态传 20，展开态传 40，锁屏传 52 —— 以 24 为界换图。
+    private static let compactMaxSize: CGFloat = 24
+
     private var imageName: String {
-        (ClawdState(rawValue: stateRaw) ?? .idle).islandGlyph
+        let name = (ClawdState(rawValue: stateRaw) ?? .idle).islandGlyph
+        guard size <= Self.compactMaxSize else { return name }
+        return name.replacingOccurrences(of: "clawd-mini-", with: "clawd-di-")
     }
 
     var body: some View {
-        // 灵动岛 / 锁屏这些面默认走 vibrant 渲染：系统把彩色图按亮度压成灰。
-        // 实测（iPhone 16 Pro 模拟器，紧凑态截图）20pt 的橙棕精灵图渲染出来
-        // 饱和度 = 0、主色 (64,64,64)，腿和眼睛全糊掉 —— 宠物成了灰方块。
-        // iOS 18 起可以显式要回原色；部署目标还是 17，低版本上这仍是系统的
-        // 呈现规则，不是代码能改的（锁屏配件那边同理，见 ClawdLockAccessoryWidget）。
-        if #available(iOS 18.0, *) {
-            glyph.widgetRenderingMode(.fullColor)
-        } else {
-            glyph
-        }
-    }
-
-    private var glyph: some View {
         Image(imageName)
             .resizable()
+            // 这几个面默认按模板渲染，不加这行彩色精灵会被压成单色剪影。
+            .renderingMode(.original)
             .scaledToFit()
             .frame(width: size, height: size)
             // 只留进场缩放，不留透明度渐变：`onAppear` 在某些实时活动呈现里不一定
-            // 触发，一旦不触发，`opacity(0.4)` 就会把宠物永久卡在半透明 —— 实测
-            // 紧凑态那块亮度对得上 40%。缩放即使没跑，最坏也只是小一圈，不会变暗。
+            // 触发，一旦不触发，`opacity(0.4)` 就会把宠物永久卡在半透明。缩放即使
+            // 没跑，最坏也只是小一圈，不会变暗。
             .scaleEffect(appeared ? 1.0 : 0.85)
             .onAppear {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {

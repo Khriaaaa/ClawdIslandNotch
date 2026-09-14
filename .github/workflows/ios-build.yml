@@ -25,6 +25,60 @@ jobs:
       - name: 生成工程
         run: xcodegen generate
 
+      # 静默失败守卫：资源目录里任何一张图只要漏写 scale，Xcode 就按单倍图算，
+      # 900px 的图成了 900pt，超过灵动岛各面的图片分辨率预算，系统会把那块换成
+      # 灰方块 —— 不报错、不崩，只有肉眼看截图才发现。所以在这里先拦一道。
+      - name: 资源尺寸守卫（漏写 scale / 超预算直接红）
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          base = "Resources/Assets.xcassets"
+          bad, over = [], []
+          # 灵动岛/小组件各面的图片预算（pt），取最紧的一档
+          budget = {
+              "clawd-di-": 36.67,
+              "clawd-mini-": 76.0,
+              "clawd-": 158.0,
+          }
+          for d in sorted(os.listdir(base)):
+              if not d.endswith(".imageset"):
+                  continue
+              name = d[:-len(".imageset")]
+              cj = os.path.join(base, d, "Contents.json")
+              try:
+                  meta = json.load(open(cj, encoding="utf-8"))
+              except Exception as e:
+                  bad.append(f"{name}: Contents.json 读不了 ({e})")
+                  continue
+              imgs = meta.get("images", [])
+              if not imgs:
+                  bad.append(f"{name}: images 是空的")
+                  continue
+              for it in imgs:
+                  if "scale" not in it:
+                      bad.append(f"{name}: 有图没写 scale -> 会被当成 1 倍图")
+              # 声明的点尺寸 = 最大 px / 该图的 scale 倍数
+              pt = 0.0
+              for it in imgs:
+                  if "scale" not in it or "filename" not in it:
+                      continue
+                  px = int(float(it["scale"].rstrip("x")))
+                  from struct import unpack
+                  with open(os.path.join(base, d, it["filename"]), "rb") as f:
+                      head = f.read(26)
+                  w, h = unpack(">II", head[16:24])
+                  pt = max(pt, w / px, h / px)
+              for pre, lim in budget.items():
+                  if name.startswith(pre) and pt > lim:
+                      over.append(f"{name}: 最大点尺寸 {pt:.1f}pt 超过 {pre} 一档的 {lim}pt 预算")
+          for l in bad + over:
+              print("ASSET FAIL " + l)
+          if bad or over:
+              print(f"图片资源有 {len(bad)} 处漏写 scale、{len(over)} 处超预算")
+              sys.exit(1)
+          print("资源尺寸守卫通过：每张图都显式声明 scale 且未超各面预算")
+          PY
+
       - name: 真机编译（不签名）
         run: |
           set +e

@@ -1,8 +1,19 @@
 {
   "images": [
     {
-      "filename": "clawd-carrying.png",
-      "idiom": "universal"
+      "filename": "clawd-carrying-1x.png",
+      "idiom": "universal",
+      "scale": "1x"
+    },
+    {
+      "filename": "clawd-carrying-2x.png",
+      "idiom": "universal",
+      "scale": "2x"
+    },
+    {
+      "filename": "clawd-carrying-3x.png",
+      "idiom": "universal",
+      "scale": "3x"
     }
   ],
   "info": {

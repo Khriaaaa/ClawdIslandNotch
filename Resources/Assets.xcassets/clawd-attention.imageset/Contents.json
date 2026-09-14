@@ -1,8 +1,19 @@
 {
   "images": [
     {
-      "filename": "clawd-attention.png",
-      "idiom": "universal"
+      "filename": "clawd-attention-1x.png",
+      "idiom": "universal",
+      "scale": "1x"
+    },
+    {
+      "filename": "clawd-attention-2x.png",
+      "idiom": "universal",
+      "scale": "2x"
+    },
+    {
+      "filename": "clawd-attention-3x.png",
+      "idiom": "universal",
+      "scale": "3x"
     }
   ],
   "info": {

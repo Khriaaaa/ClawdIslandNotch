@@ -1,8 +1,19 @@
 {
   "images": [
     {
-      "filename": "clawd-mini-happy.png",
-      "idiom": "universal"
+      "filename": "clawd-mini-happy-1x.png",
+      "idiom": "universal",
+      "scale": "1x"
+    },
+    {
+      "filename": "clawd-mini-happy-2x.png",
+      "idiom": "universal",
+      "scale": "2x"
+    },
+    {
+      "filename": "clawd-mini-happy-3x.png",
+      "idiom": "universal",
+      "scale": "3x"
     }
   ],
   "info": {
