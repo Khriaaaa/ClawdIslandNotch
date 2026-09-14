@@ -108,6 +108,13 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.clawd.island.keyboard
         SKIP_INSTALL: YES
+    entitlements:
+      path: Keyboard/ClawdKeyboard.entitlements
+      properties:
+        # 键盘要读宿主 App 写进 App Group 的 Claude Code 状态。
+        # 没开「完全访问」时扩展读不到共享容器，那 Clawd 就只有打字反应，其它不受影响。
+        com.apple.security.application-groups:
+          - group.com.clawd.island.clawd
 
   ClawdWidgetExtension:
     type: app-extension

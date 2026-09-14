@@ -4,6 +4,12 @@ import UIKit
 ///
 /// 位置上正好是系统键盘「候选词条」那一行，所以以后接拼音候选字，
 /// 直接浮在这条里就行，不用再占地方。
+///
+/// 条右边那四颗圆形工具按钮照着真机截图摆（直径 29.3 / 间距 16.67 / 右缩进 14.3），
+/// 截图里最左边那颗品牌图标的位置留给 Clawd，所以它从条左边一直逛到按钮组跟前。
+///
+/// 这里**没有**状态文字：条只有 46pt，右边四颗按钮占掉 167pt，
+/// 再塞一行字螃蟹就没地方走了 —— 状态改由它的姿势表达（敲键盘 / 睡着 / 举牌）。
 final class PetStripView: UIView {
 
     enum Mood: Equatable {
@@ -19,31 +25,32 @@ final class PetStripView: UIView {
             case .happy:    return "clawd-mini-happy"
             }
         }
-
-        var text: String {
-            switch self {
-            case .idle:     return "Clawd 在这儿"
-            case .walking:  return "Clawd 在溜达"
-            case .typing:   return "Clawd 在敲键盘"
-            case .sleeping: return "Clawd 睡着了"
-            case .alert:    return "Clawd 在等你"
-            case .happy:    return "Clawd 很开心"
-            }
-        }
     }
 
+    /// 工具按钮点了以后往上抛
+    var onToolAction: ((KeyAction) -> Void)?
+
     private let spriteView = UIImageView()
-    private let statusLabel = UILabel()
+    private var toolButtons: [ToolButton] = []
 
     private var mood: Mood = .idle
     private var position: CGFloat = 0
     private var targetX: CGFloat = 0
     private var restUntil: CFTimeInterval = 0
-    private var typingUntil: CFTimeInterval = 0
+    private var holdUntil: CFTimeInterval = 0
     private var lastKeyTime: CFTimeInterval = CACurrentMediaTime()
-    private var pinnedText: String?
-    private var displayLink: CADisplayLink?
+    private var external: Mood?
     private var theme = KeyboardTheme(dark: true)
+
+    // CADisplayLink 会强引用 target，用它就会形成 runloop ↔ self 的环，
+    // deinit 永远不跑、invalidate 变死代码。所以走一个弱代理。
+    private var displayLink: CADisplayLink?
+    private final class LinkProxy {
+        weak var owner: PetStripView?
+        init(_ owner: PetStripView) { self.owner = owner }
+        @objc func tick() { owner?.tick() }
+    }
+    private var linkProxy: LinkProxy?
 
     private let sleepAfter: CFTimeInterval = 45
     private let walkSpeed: CGFloat = 30          // pt / 秒
@@ -51,17 +58,19 @@ final class PetStripView: UIView {
 
     // MARK: - 尺寸
 
-    /// 螃蟹占满整条高度（不是缩到一半）—— 条高 44pt 时螃蟹约 68pt 宽，
-    /// 在原尺寸截图里 Clawd 就是差不多这个体量
-    private var spriteHeight: CGFloat { max(18, bounds.height - 2) }
+    /// 螃蟹比圆形按钮（29.3）略大一圈，像个角色而不像第五颗按钮
+    private var spriteHeight: CGFloat { max(18, KeyboardMetrics.stripHeight - 8) }
     private var spriteAspect: CGFloat {
         guard let image = spriteView.image, image.size.height > 0 else { return 1.6 }
         return image.size.width / image.size.height
     }
     private var spriteWidth: CGFloat { spriteHeight * spriteAspect }
-    /// 只让它逛左半边 —— 用户圈的活动范围就是工具条靠左那一段，
-    /// 右半边留给状态文字，也顺手避免走动时糊在文字上
-    private var maxX: CGFloat { max(0, bounds.width * 0.5 - spriteWidth) }
+    private var minX: CGFloat { KeyboardMetrics.toolSideInset }
+    /// 右边界到按钮组跟前为止，还要留 8pt 别贴着
+    private var maxX: CGFloat {
+        let groupStart = KeyboardMetrics.toolGroupStart(totalWidth: bounds.width)
+        return max(minX, groupStart - 8 - spriteWidth)
+    }
 
     // MARK: - 生命周期
 
@@ -72,10 +81,20 @@ final class PetStripView: UIView {
         spriteView.contentMode = .scaleAspectFit
         addSubview(spriteView)
 
-        statusLabel.font = .systemFont(ofSize: 11, weight: .medium)
-        statusLabel.textAlignment = .right
-        statusLabel.lineBreakMode = .byTruncatingHead
-        addSubview(statusLabel)
+        // 四颗工具按钮：语言、表情、剪贴板、收起键盘
+        let items: [(KeyAction, String?, String?)] = [
+            (.nextKeyboard, nil, "文\nA"),
+            (.toEmoji, "cube", nil),
+            (.clipboard, "doc.on.clipboard", nil),
+            (.dismiss, "chevron.down", nil),
+        ]
+        toolButtons = items.map { action, symbol, text in
+            let button = ToolButton(action: action, symbol: symbol, text: text, theme: theme)
+            button.addGestureRecognizer(
+                UITapGestureRecognizer(target: self, action: #selector(handleToolTap(_:))))
+            addSubview(button)
+            return button
+        }
 
         addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(handleTap)))
 
@@ -85,7 +104,10 @@ final class PetStripView: UIView {
 
     required init?(coder: NSCoder) { fatalError("不支持 xib") }
 
-    deinit { displayLink?.invalidate() }
+    deinit {
+        displayLink?.invalidate()
+        displayLink = nil
+    }
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
@@ -94,11 +116,19 @@ final class PetStripView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        position = min(position, maxX)
-        spriteView.frame = CGRect(x: position, y: 1,
+
+        // 工具按钮：整组右对齐
+        let d = KeyboardMetrics.toolDiameter
+        let groupStart = KeyboardMetrics.toolGroupStart(totalWidth: bounds.width)
+        for (i, button) in toolButtons.enumerated() {
+            let x = groupStart + CGFloat(i) * (d + KeyboardMetrics.toolSpacing)
+            button.frame = CGRect(x: x, y: (bounds.height - d) / 2, width: d, height: d)
+            button.layer.cornerRadius = d / 2
+        }
+
+        position = min(max(position, minX), maxX)
+        spriteView.frame = CGRect(x: position, y: (bounds.height - spriteHeight) / 2,
                                   width: spriteWidth, height: spriteHeight)
-        statusLabel.frame = CGRect(x: bounds.width * 0.35, y: 0,
-                                   width: bounds.width * 0.65 - 12, height: bounds.height)
     }
 
     // MARK: - 对外
@@ -106,29 +136,26 @@ final class PetStripView: UIView {
     func apply(theme: KeyboardTheme) {
         self.theme = theme
         backgroundColor = theme.stripBackground
-        statusLabel.textColor = theme.stripText
+        toolButtons.forEach { $0.apply(theme: theme) }
     }
 
     /// 每敲一个键叫一次
     func petDidType() {
         let now = CACurrentMediaTime()
         lastKeyTime = now
-        typingUntil = now + 0.7
+        holdUntil = now + 0.7
         if mood != .alert { setMood(.typing) }
     }
 
-    /// 外部状态（以后接状态服务器，Claude Code 干活就传文本进来）
-    func setStatusText(_ text: String?) {
-        pinnedText = text
-        statusLabel.text = text ?? mood.text
-    }
-
-    func flashAlert() { setMood(.alert) }
-
-    func relax() {
-        guard mood == .alert else { return }
-        setMood(.idle)
-        restUntil = CACurrentMediaTime() + 0.5
+    /// 外部状态（Claude Code 在干活 / 在等批准 / 出错了）盖在打字状态之上
+    func setExternalState(_ state: Mood?) {
+        external = state
+        if let state {
+            setMood(state)
+        } else if mood == .alert {
+            setMood(.idle)
+            restUntil = CACurrentMediaTime() + 0.5
+        }
     }
 
     var currentMood: Mood { mood }
@@ -136,16 +163,26 @@ final class PetStripView: UIView {
     // MARK: - 内部
 
     @objc private func handleTap() {
-        typingUntil = CACurrentMediaTime() + 1.2
+        holdUntil = CACurrentMediaTime() + 1.2
         setMood(.happy)
     }
 
+    @objc private func handleToolTap(_ gesture: UITapGestureRecognizer) {
+        guard let button = gesture.view as? ToolButton else { return }
+        button.setPressed(true)
+        UIDevice.current.playInputClick()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { button.setPressed(false) }
+        onToolAction?(button.keyAction)
+    }
+
     private func startDisplayLink() {
-        let link = CADisplayLink(target: self, selector: #selector(tick))
+        let proxy = LinkProxy(self)
+        let link = CADisplayLink(target: proxy, selector: #selector(LinkProxy.tick))
         link.preferredFramesPerSecond = Int(framesPerSecond)
         // 必须挂在 .common：打字时主 runloop 在 tracking 模式，默认模式下的 timer 会停
         link.add(to: .main, forMode: .common)
         displayLink = link
+        linkProxy = proxy
     }
 
     private func setMood(_ new: Mood) {
@@ -158,19 +195,25 @@ final class PetStripView: UIView {
 
     private func render() {
         spriteView.image = PetSpriteStore.shared.image(named: mood.spriteName)
-        statusLabel.text = pinnedText ?? mood.text
     }
 
-    @objc private func tick() {
+    private func tick() {
         guard window != nil else { return }
         let now = CACurrentMediaTime()
 
-        switch mood {
-        case .typing:
-            if now > typingUntil { setMood(.idle); restUntil = now + 0.5 }
+        // 外部状态优先，它说什么就是什么
+        if let external {
+            if mood != external { setMood(external) }
+            return
+        }
 
-        case .happy:
-            if now > typingUntil { setMood(.idle); restUntil = now + 0.8 }
+        switch mood {
+        case .typing, .happy:
+            if now > holdUntil {
+                let wasHappy = (mood == .happy)
+                setMood(.idle)
+                restUntil = now + (wasHappy ? 0.8 : 0.5)
+            }
 
         case .alert, .sleeping:
             break
@@ -179,7 +222,7 @@ final class PetStripView: UIView {
             if now - lastKeyTime > sleepAfter {
                 setMood(.sleeping)
             } else if now > restUntil {
-                targetX = CGFloat.random(in: 0...maxX)
+                targetX = CGFloat.random(in: minX...maxX)
                 setMood(.walking)
             }
 

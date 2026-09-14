@@ -2,6 +2,9 @@ import SwiftUI
 
 /// 宿主 App 里的键盘预览页：把扩展里那份 ClawdKeyboardView 原样搬进来跑。
 /// 一是真机上不用去设置里装键盘就能试手感，二是 CI 里能直接截图。
+///
+/// 注意这只进假 sink，不写进任何真实的输入框 —— 页面里写了说明，
+/// 免得看着像真键盘却存不了字。
 struct KeyboardPreviewScreen: View {
     @StateObject private var model = KeyboardPreviewModel()
 
@@ -9,7 +12,7 @@ struct KeyboardPreviewScreen: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("这是键盘扩展里那块视图，原样搬进 App 跑")
+                    Text("这是键盘扩展里那块视图，原样搬进 App 跑。这里敲的键只进下面这个假输入框，不会写进别的 App。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
 
@@ -26,15 +29,29 @@ struct KeyboardPreviewScreen: View {
                     }
 
                     HStack(spacing: 14) {
-                        Label("活动条 \(Int(KeyboardMetrics.stripHeight))pt", systemImage: "ruler")
-                        Label("键盘总高 \(Int(KeyboardMetrics.totalHeight))pt", systemImage: "keyboard")
+                        Label("活动条 \\(Int(KeyboardMetrics.stripHeight))pt", systemImage: "ruler")
+                        Label("键盘总高 \\(Int(KeyboardMetrics.totalHeight))pt", systemImage: "keyboard")
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                    Text("点一下 Clawd 它会开心；连敲几个键看它敲键盘；放着不动 45 秒它会睡着")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("在真机上用真键盘：设置 → 通用 → 键盘 → 键盘 → 添加新键盘 → ClawdIsland")
+                        Text("加完再点一次输入框，用左下角的地球切过来。想让它读 Claude Code 的状态，还要在这个键盘上打开「完全访问」")
+                        Text("点一下 Clawd 它会开心；连敲几个键看它敲键盘；放着不动 45 秒它会睡着")
+                        Text("⇧ 按一下上档一次，连按两下锁住；退格长按连删；空格双击出句号；「中英」长按切输入法")
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+
+                    Button {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    } label: {
+                        Label("打开系统设置", systemImage: "gear")
+                            .font(.footnote)
+                    }
                 }
                 .padding()
             }
@@ -57,6 +74,8 @@ struct KeyboardHostView: UIViewRepresentable {
     func makeUIView(context: Context) -> ClawdKeyboardView {
         let view = ClawdKeyboardView(frame: .zero)
         view.sink = model.sink
+        // 真机上系统多半会说要能切输入法，预览里也按 true 画，好让截图带上那颗地球角标
+        view.needsInputModeSwitchKey = true
         view.onKeySound = { UIDevice.current.playInputClick() }
         return view
     }
