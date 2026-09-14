@@ -24,6 +24,27 @@ struct ContentView: View {
         .onOpenURL { url in
             if url.scheme == NotchDeepLink.scheme { selection = 1 }
         }
+        .onAppear { writeFrameMarker() }
+    }
+
+    /// CI 用的首帧证据：每张截图都自称是某个 tab 的状态，但原来只是 sleep 十几秒
+    /// 就拍 —— 启动崩了、或渲染停在别的页，拍成主屏 job 照样是绿的。
+    /// 打开 CLAWD_FRAME_MARKER=1，App 在首帧提交之后把当前 tab 写出来，CI 等这个
+    /// 文件并按 tab 号判定：图上是什么状态由 App 自己说，不靠时间猜。
+    private func writeFrameMarker() {
+        guard ProcessInfo.processInfo.environment["CLAWD_FRAME_MARKER"] == "1" else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            guard let docs = FileManager.default.urls(for: .documentDirectory,
+                                                      in: .userDomainMask).first else { return }
+            try? FileManager.default.createDirectory(at: docs, withIntermediateDirectories: true)
+            do {
+                try "FRAME READY tab=\(selection)"
+                    .write(to: docs.appendingPathComponent("frame.txt"),
+                           atomically: true, encoding: .utf8)
+            } catch {
+                NSLog("首帧标记写入失败：\(error)")
+            }
+        }
     }
 }
 

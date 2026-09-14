@@ -84,7 +84,22 @@ jobs:
             build > build-sim.log 2>&1
           tail -8 build-sim.log
           xcrun simctl install "$D" build-sim/Build/Products/Debug-iphonesimulator/ClawdIsland.app
-          xcrun simctl launch "$D" com.clawd.island || echo "launch 失败"
+          CONT=$(xcrun simctl get_app_container "$D" com.clawd.island data)
+          M="$CONT/Documents/frame.txt"
+          rm -f "$M"
+          # 这张图自称是「状态页」（tab=0），就让 App 自己说它渲染的是哪个 tab。
+          # 原来只 sleep 14 秒就拍：启动崩了、或渲染停在别的页，拍成主屏也是绿的。
+          # launch 失败也不再吞掉 —— 吞了以后错的是图、绿的是 job。
+          SIMCTL_CHILD_CLAWD_FRAME_MARKER=1 xcrun simctl launch "$D" com.clawd.island \
+            || { echo "app 起不来，下面这张图没有意义"; exit 1; }
+          i=0
+          while [ "$i" -lt 40 ]; do
+            if [ -s "$M" ]; then break; fi
+            sleep 1
+            i=$((i + 1))
+          done
+          grep -q "^FRAME READY tab=0$" "$M" \
+            || { echo "首帧标记不对，拍的这张图不可信：$(cat "$M" 2>/dev/null || echo 标记没写出来)"; exit 1; }
           sleep 14
           xcrun simctl io "$D" screenshot shot-1-status-empty.png
           ls -lh shot-1-status-empty.png
@@ -131,7 +146,22 @@ jobs:
           tail -6 build-sim-notch.log
           xcrun simctl terminate "$D" com.clawd.island || true
           xcrun simctl install "$D" build-sim-notch/Build/Products/Debug-iphonesimulator/ClawdIsland.app
-          xcrun simctl launch "$D" com.clawd.island || echo "launch 失败"
+          CONT=$(xcrun simctl get_app_container "$D" com.clawd.island data)
+          M="$CONT/Documents/frame.txt"
+          rm -f "$M"
+          # 这张图自称是「刘海页」（tab=1），就让 App 自己说它渲染的是哪个 tab。
+          # 原来只 sleep 14 秒就拍：启动崩了、或渲染停在别的页，拍成主屏也是绿的。
+          # launch 失败也不再吞掉 —— 吞了以后错的是图、绿的是 job。
+          SIMCTL_CHILD_CLAWD_FRAME_MARKER=1 xcrun simctl launch "$D" com.clawd.island \
+            || { echo "app 起不来，下面这张图没有意义"; exit 1; }
+          i=0
+          while [ "$i" -lt 40 ]; do
+            if [ -s "$M" ]; then break; fi
+            sleep 1
+            i=$((i + 1))
+          done
+          grep -q "^FRAME READY tab=1$" "$M" \
+            || { echo "首帧标记不对，拍的这张图不可信：$(cat "$M" 2>/dev/null || echo 标记没写出来)"; exit 1; }
           sleep 14
           xcrun simctl io "$D" screenshot shot-3-notch.png
           ls -lh shot-3-notch.png
@@ -156,7 +186,22 @@ jobs:
           tail -6 build-sim-set.log
           xcrun simctl terminate "$D" com.clawd.island || true
           xcrun simctl install "$D" build-sim-set/Build/Products/Debug-iphonesimulator/ClawdIsland.app
-          xcrun simctl launch "$D" com.clawd.island || echo "launch 失败"
+          CONT=$(xcrun simctl get_app_container "$D" com.clawd.island data)
+          M="$CONT/Documents/frame.txt"
+          rm -f "$M"
+          # 这张图自称是「设置页」（tab=2），就让 App 自己说它渲染的是哪个 tab。
+          # 原来只 sleep 14 秒就拍：启动崩了、或渲染停在别的页，拍成主屏也是绿的。
+          # launch 失败也不再吞掉 —— 吞了以后错的是图、绿的是 job。
+          SIMCTL_CHILD_CLAWD_FRAME_MARKER=1 xcrun simctl launch "$D" com.clawd.island \
+            || { echo "app 起不来，下面这张图没有意义"; exit 1; }
+          i=0
+          while [ "$i" -lt 40 ]; do
+            if [ -s "$M" ]; then break; fi
+            sleep 1
+            i=$((i + 1))
+          done
+          grep -q "^FRAME READY tab=2$" "$M" \
+            || { echo "首帧标记不对，拍的这张图不可信：$(cat "$M" 2>/dev/null || echo 标记没写出来)"; exit 1; }
           sleep 14
           xcrun simctl io "$D" screenshot shot-4-settings.png
           ls -lh shot-4-settings.png
@@ -184,7 +229,22 @@ jobs:
           plutil -p build-sim-kb/Build/Products/Debug-iphonesimulator/ClawdIsland.app/PlugIns/ClawdKeyboard.appex/Info.plist 2>/dev/null | grep -i -A2 NSExtensionPointIdentifier || true
           xcrun simctl terminate "$D" com.clawd.island || true
           xcrun simctl install "$D" build-sim-kb/Build/Products/Debug-iphonesimulator/ClawdIsland.app
-          xcrun simctl launch "$D" com.clawd.island || echo "launch 失败"
+          CONT=$(xcrun simctl get_app_container "$D" com.clawd.island data)
+          M="$CONT/Documents/frame.txt"
+          rm -f "$M"
+          # 这张图自称是「键盘预览页」（tab=3），就让 App 自己说它渲染的是哪个 tab。
+          # 原来只 sleep 16 秒就拍：启动崩了、或渲染停在别的页，拍成主屏也是绿的。
+          # launch 失败也不再吞掉 —— 吞了以后错的是图、绿的是 job。
+          SIMCTL_CHILD_CLAWD_FRAME_MARKER=1 xcrun simctl launch "$D" com.clawd.island \
+            || { echo "app 起不来，下面这张图没有意义"; exit 1; }
+          i=0
+          while [ "$i" -lt 40 ]; do
+            if [ -s "$M" ]; then break; fi
+            sleep 1
+            i=$((i + 1))
+          done
+          grep -q "^FRAME READY tab=3$" "$M" \
+            || { echo "首帧标记不对，拍的这张图不可信：$(cat "$M" 2>/dev/null || echo 标记没写出来)"; exit 1; }
           sleep 16
           xcrun simctl io "$D" screenshot shot-5-keyboard.png
           ls -lh shot-5-keyboard.png
