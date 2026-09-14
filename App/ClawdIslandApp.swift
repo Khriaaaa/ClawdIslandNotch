@@ -102,6 +102,10 @@ final class ClawdCoordinator: ObservableObject {
     private var fallbackTimer: Timer?
     private var sessionStartedAt: Date
     private var sessionId: String = "clawd:default"
+    /// 当前作息节拍演到什么时候。`.distantPast` 让第一个 tick 立刻掷一个。
+    private var ambientUntil: Date = .distantPast
+    /// 作息节拍下限（秒）：锁屏 / 灵动岛每换一次状态都是一次系统预算，别按秒换。
+    private let ambientMinimum: TimeInterval = 45
 
     private enum Keys {
         static let serverEnabled = "clawd.serverEnabled"
@@ -119,7 +123,10 @@ final class ClawdCoordinator: ObservableObject {
         self.sessionStartedAt = hasStored ? stored.sessionStartedAt : Date()
 
         let defaults = UserDefaults.standard
-        self.serverEnabled = defaults.object(forKey: Keys.serverEnabled) as? Bool ?? true
+        // 外部状态推送默认关：Clawd 自己按作息过日子，不再等代理喂状态。
+        // 想接代理（或 CI 里验协议）用环境变量 CLAWD_SERVER=1 打开。
+        let envServer = ProcessInfo.processInfo.environment["CLAWD_SERVER"] == "1"
+        self.serverEnabled = (defaults.object(forKey: Keys.serverEnabled) as? Bool) ?? envServer
         self.autoStartLiveActivity = defaults.object(forKey: Keys.autoStartLiveActivity) as? Bool ?? true
         self.advertisedHost = defaults.string(forKey: Keys.advertisedHost) ?? ""
 
@@ -156,14 +163,27 @@ final class ClawdCoordinator: ObservableObject {
         }
     }
 
-    /// 每秒检查一次性状态是否该回落（对应 theme.json 的 autoReturn）。
+    /// 每秒推进一次。Clawd 不看外部事件，按真实时钟自己掷节拍：
+    /// 白天闲逛、午间打盹、深夜睡、偶尔起来玩（`Core/ClawdBiorhythm.swift`）。
+    /// 打字那一路在键盘扩展里（`PetStripView.petDidType`），App 这边看不到。
+    ///
+    /// `ambientMinimum` 给到 45 秒：锁屏 / 灵动岛每换一次状态都是一次系统预算，
+    /// 按秒换会被降频，也不好看。
     private func tick() {
-        guard let next = gate.fallback() else { return }
-        apply(next, event: nil, imageOverride: nil)
+        let now = Date()
+        guard now >= ambientUntil else { return }
+        let slot = ClawdBiorhythm.nextSlot(at: now, minimumDuration: ambientMinimum)
+        ambientUntil = now.addingTimeInterval(slot.duration)
+        apply(slot.state, event: nil, imageOverride: nil)
     }
 
     // MARK: - 事件处理
 
+    /// 外部代理推来的状态。
+    ///
+    /// **只有用户主动打开监听时才会走到这条路径**（默认关，见 `serverEnabled`）：
+    /// Clawd 平时自己按作息过日子，这里是留给「以后想接代理干活」的钩子。
+    /// CI 里显式用 `CLAWD_SERVER=1` 打开，逐态素材截图就靠它。
     func handle(_ event: ClawdEvent) {
         // 收条先写：CI 靠它证明状态真的进了这个 App，而不是进了隔壁模拟器那台。
         // 注意别写成 `Self.` —— 这里是 ClawdCoordinator，收条挂在 ClawdIslandApp 上。
@@ -180,11 +200,9 @@ final class ClawdCoordinator: ObservableObject {
         let newState = event.state
         let image = newState == .working ? ClawdState.workingImageName(activeSessions: activeWorkingCount()) : nil
 
-        guard gate.accept(newState, now: event.receivedAt) else {
-            // 被最小展示时长挡住：只更新小组件里的会话标题之类，不换主状态。
-            refreshOnlyTitle(event)
-            return
-        }
+        guard gate.accept(newState, now: event.receivedAt) else { return }
+        // 推来的状态先站住一拍，别让作息在下一个 tick 立刻把它盖回去
+        ambientUntil = event.receivedAt.addingTimeInterval(ambientMinimum)
         apply(newState, event: event, imageOverride: image)
     }
 
@@ -214,16 +232,6 @@ final class ClawdCoordinator: ObservableObject {
         manualSet(.sleeping)
     }
 
-    private func refreshOnlyTitle(_ event: ClawdEvent) {
-        var updated = snapshot
-        if let title = event.sessionTitle, !title.isEmpty { updated.sessionTitle = title }
-        if let agent = event.agentId, !agent.isEmpty { updated.agentId = agent }
-        if !event.detail.isEmpty { updated.detail = event.detail }
-        snapshot = updated
-        ClawdStore.save(updated)
-        activities.refreshWidgets()
-    }
-
     private func apply(_ state: ClawdState, event: ClawdEvent?, imageOverride: String?) {
         let newSnapshot = ClawdSnapshot(
             state: state,
@@ -241,8 +249,8 @@ final class ClawdCoordinator: ObservableObject {
         }
     }
 
+    /// 最近 60 秒内出现过 working/thinking 的不同会话数，近似 theme.json 的 workingTiers。
     private func activeWorkingCount() -> Int {
-        // 最近 60 秒内出现过 working/thinking 的不同会话数，近似 theme.json 的 workingTiers。
         let cutoff = Date().addingTimeInterval(-60)
         var sessions = Set<String>()
         for event in events where event.receivedAt >= cutoff {

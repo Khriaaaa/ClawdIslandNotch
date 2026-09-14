@@ -223,7 +223,9 @@ jobs:
           # 这张图自称是「状态页」（tab=0），就让 App 自己说它渲染的是哪个 tab。
           # 原来只 sleep 14 秒就拍：启动崩了、或渲染停在别的页，拍成主屏也是绿的。
           # launch 失败也不再吞掉 —— 吞了以后错的是图、绿的是 job。
-          SIMCTL_CHILD_CLAWD_FRAME_MARKER=1 xcrun simctl launch "$D" com.clawd.island \
+          # CLAWD_SERVER=1：推送默认关了（Clawd 平时自己按作息过日子），CI 里显式打开验协议
+          SIMCTL_CHILD_CLAWD_FRAME_MARKER=1 SIMCTL_CHILD_CLAWD_SERVER=1 \
+            xcrun simctl launch "$D" com.clawd.island \
             || { echo "app 起不来，下面这张图没有意义"; exit 1; }
           i=0
           while [ "$i" -lt 40 ]; do
@@ -483,7 +485,8 @@ jobs:
           R="$CONT/Documents/received.txt"
           A="$CONT/Documents/la-applied.txt"
           rm -f "$M" "$R" "$A"
-          SIMCTL_CHILD_CLAWD_LA_MARKER=1 xcrun simctl launch "$DI" com.clawd.island || echo "launch 失败"
+          SIMCTL_CHILD_CLAWD_LA_MARKER=1 SIMCTL_CHILD_CLAWD_SERVER=1 \
+            xcrun simctl launch "$DI" com.clawd.island || echo "launch 失败"
           # 实时活动起没起来由 App 写出来，不靠看图猜。等不到就是没起来，直接红。
           i=0
           while [ "$i" -lt 40 ]; do

@@ -16,7 +16,9 @@ trap 'rm -rf "$TMP"' EXIT
 # viewBox 留白很多而让宠物偏小、且边缘发软。
 rsvg-convert -w 4096 -h 4096 svg-src/clawd-idle.svg -o "$TMP/pet.png"
 
-python3 - "$TMP/pet.png" "Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png" <<'PY'
+# 需要 Pillow。系统 python3 没有时用 PYTHON=/path/to/python 指一个带 Pillow 的解释器。
+PY="${PYTHON:-python3}"
+"$PY" - "$TMP/pet.png" "Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png" <<'PY'
 import sys
 from PIL import Image, ImageDraw
 import numpy as np
@@ -27,7 +29,7 @@ ys, xs = np.nonzero(a[..., 3] > 8)
 pet = src.crop((xs.min(), ys.min(), xs.max() + 1, ys.max() + 1))
 
 S = 1024
-W = int(S * 0.72)                      # 宠物占图标宽度 72%，主屏上不至于单薄
+W = int(S * 0.80)                      # 宠物占图标宽度 72%，主屏上不至于单薄
 pet = pet.resize((W, int(pet.height * W / pet.width)), Image.LANCZOS)
 
 bg = Image.new("RGBA", (S, S))

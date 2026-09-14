@@ -463,11 +463,4 @@ final class ClawdKeyboardView: UIView {
         keyViews.forEach { $0.apply(theme: theme) }
         applyInputModeBadge()
     }
-
-    // MARK: - 外部状态
-
-    /// Claude Code 在干活 / 在等批准 / 出错，直接驱动 Clawd 的姿势
-    func setExternalState(_ state: PetStripView.Mood?) {
-        strip.setExternalState(state)
-    }
 }

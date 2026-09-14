@@ -8,8 +8,13 @@ import UIKit
 /// 条右边那四颗圆形工具按钮照着真机截图摆（直径 29.3 / 间距 16.67 / 右缩进 14.3），
 /// 截图里最左边那颗品牌图标的位置留给 Clawd，所以它从条左边一直逛到按钮组跟前。
 ///
+/// 行为就两条（2026-09-15 定的方向）：
+/// 1. **打字跟着敲**：每敲一个键 `petDidType()`，打字姿按住 0.7 秒
+/// 2. **不打字时按真实时钟过日子**：`ClawdBiorhythm` 按当前时段掷一个节拍
+///    （白天闲逛、午间打盹、深夜睡、偶尔起来玩），一段演完再掷下一段
+///
 /// 这里**没有**状态文字：条只有 46pt，右边四颗按钮占掉 167pt，
-/// 再塞一行字螃蟹就没地方走了 —— 状态改由它的姿势表达（敲键盘 / 睡着 / 举牌）。
+/// 再塞一行字螃蟹就没地方走了 —— 状态改由它的姿势表达（敲键盘 / 睡着 / 玩）。
 final class PetStripView: UIView {
 
     enum Mood: Equatable {
@@ -36,10 +41,11 @@ final class PetStripView: UIView {
     private var mood: Mood = .idle
     private var position: CGFloat = 0
     private var targetX: CGFloat = 0
-    private var restUntil: CFTimeInterval = 0
+    /// 打字姿 / 开心姿按到这个时刻
     private var holdUntil: CFTimeInterval = 0
-    private var lastKeyTime: CFTimeInterval = CACurrentMediaTime()
-    private var external: Mood?
+    /// 当前作息节拍要演的姿势，以及演到什么时候
+    private var ambientMood: Mood = .idle
+    private var ambientUntil: CFTimeInterval = 0
     private var theme = KeyboardTheme(dark: true)
 
     // CADisplayLink 会强引用 target，用它就会形成 runloop ↔ self 的环，
@@ -52,9 +58,10 @@ final class PetStripView: UIView {
     }
     private var linkProxy: LinkProxy?
 
-    private let sleepAfter: CFTimeInterval = 45
     private let walkSpeed: CGFloat = 30          // pt / 秒
     private let framesPerSecond: CGFloat = 30
+    /// 敲完最后一个键还保持打字姿多久
+    private let typingHold: CFTimeInterval = 0.7
 
     // MARK: - 尺寸
 
@@ -157,24 +164,18 @@ final class PetStripView: UIView {
 
     /// 每敲一个键叫一次
     func petDidType() {
-        let now = CACurrentMediaTime()
-        lastKeyTime = now
-        holdUntil = now + 0.7
+        holdUntil = CACurrentMediaTime() + typingHold
         if mood != .alert { setMood(.typing) }
     }
 
-    /// 外部状态（Claude Code 在干活 / 在等批准 / 出错了）盖在打字状态之上
-    func setExternalState(_ state: Mood?) {
-        external = state
-        if let state {
-            setMood(state)
-        } else if mood == .alert {
-            setMood(.idle)
-            restUntil = CACurrentMediaTime() + 0.5
-        }
-    }
-
+    /// 当前姿势。键盘自检 / 预览页拿它判行为，不参与展示逻辑。
     var currentMood: Mood { mood }
+
+    /// 马上换一节拍。给预览页 / CI 用：不传就按当前时刻掷一个。
+    /// 真机上不需要它 —— 作息是自己在 tick 里走的。
+    func advanceAmbient(now: CFTimeInterval = CACurrentMediaTime()) {
+        startNextSlot(now)
+    }
 
     // MARK: - 内部
 
@@ -213,46 +214,82 @@ final class PetStripView: UIView {
         spriteView.image = PetSpriteStore.shared.image(named: mood.spriteName)
     }
 
+    /// 按真实时钟掷一个节拍，接上。走动是唯一带位移的，单独起。
+    private func startNextSlot(_ now: CFTimeInterval) {
+        let slot = ClawdBiorhythm.nextSlot(at: Date())
+        ambientUntil = now + slot.duration
+
+        switch slot.state {
+        case .roam:
+            ambientMood = .walking
+            targetX = CGFloat.random(in: minX...maxX)
+            setMood(.walking)
+        default:
+            let mapped = Self.stripMood(for: slot.state)
+            ambientMood = mapped
+            setMood(mapped)
+        }
+    }
+
     private func tick() {
         guard window != nil else { return }
         let now = CACurrentMediaTime()
 
-        // 外部状态优先，它说什么就是什么
-        if let external {
-            if mood != external { setMood(external) }
+        // 1) 手上还在敲（或刚被戳过）：打字 / 开心姿按住，别的一切让位
+        if now < holdUntil {
+            if mood != .typing && mood != .happy { setMood(.typing) }
             return
         }
 
-        switch mood {
-        case .typing, .happy:
-            if now > holdUntil {
-                let wasHappy = (mood == .happy)
-                setMood(.idle)
-                restUntil = now + (wasHappy ? 0.8 : 0.5)
+        // 2) 短姿刚过完：节拍还没到点就交回节拍的姿势，到点了就掷下一个
+        if mood == .typing || mood == .happy {
+            if now >= ambientUntil {
+                startNextSlot(now)
+            } else {
+                setMood(ambientMood)
             }
+            return
+        }
 
-        case .alert, .sleeping:
-            break
-
-        case .idle:
-            if now - lastKeyTime > sleepAfter {
-                setMood(.sleeping)
-            } else if now > restUntil {
-                targetX = CGFloat.random(in: minX...maxX)
-                setMood(.walking)
-            }
-
-        case .walking:
+        // 3) 走动：逐帧推位置，走到点就歇一下、把这一节拍走完
+        if mood == .walking {
             let dx = targetX - position
             let step = walkSpeed / framesPerSecond
             if abs(dx) <= step {
                 position = targetX
                 setMood(.idle)
-                restUntil = now + Double.random(in: 0.6...2.2)
+                ambientMood = .idle
+                ambientUntil = now + Double.random(in: 0.6...2.2)
             } else {
                 position += dx > 0 ? step : -step
                 spriteView.frame.origin.x = position
             }
+            return
+        }
+
+        // 4) 节拍到点，掷下一段
+        if now >= ambientUntil {
+            startNextSlot(now)
+        }
+    }
+
+    /// 作息状态 → 活动条姿势。键盘上只有六张图，这里做归并：
+    /// 玩（juggling / dizzy）用开心图，睡的一族（yawning / dozing / sleeping /
+    /// collapsing）都睡姿，警戒一族（attention / notification / error）用举牌图。
+    ///
+    /// 名字带 `strip` 前缀不是啰嗦：上面那个实例属性就叫 `mood`，同名静态方法会撞。
+    static func stripMood(for state: ClawdState) -> Mood {
+        switch state {
+        case .roam:
+            return .walking
+        case .juggling, .dizzy:
+            return .happy
+        case .yawning, .dozing, .sleeping, .collapsing:
+            return .sleeping
+        case .attention, .notification, .error:
+            return .alert
+        case .idle, .waking, .thinking, .working, .sweeping, .carrying:
+            return .idle
         }
     }
 }
