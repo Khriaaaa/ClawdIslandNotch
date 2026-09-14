@@ -83,13 +83,26 @@ struct KeyboardHostView: UIViewRepresentable {
         // 那条路径从来没被跑过 —— pi 第三轮抓到的越界崩就是这么漏出去的。
         // 打开 CLAWD_KB_SELFTEST=1 就让宿主真的走一遍那段代码，结果落盘给 CI 读。
         if ProcessInfo.processInfo.environment["CLAWD_KB_SELFTEST"] == "1" {
+            let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
+                .first?.appendingPathComponent("selftest.txt")
+            var lines: [String] = []
+            func flush() {
+                guard let url else { return }
+                try? lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+            }
+
+            // 第一段跑完停在表情页（底行带地球），CI 中间那张截图就拍这个时间点
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                let lines = view.runEmojiTapSelfTest()
-                guard let dir = FileManager.default.urls(for: .documentDirectory,
-                                                         in: .userDomainMask).first else { return }
-                try? lines.joined(separator: "\n").write(
-                    to: dir.appendingPathComponent("selftest.txt"),
-                    atomically: true, encoding: .utf8)
+                lines.append(contentsOf: view.runEmojiTapSelfTest())
+                flush()
+            }
+            // 第二段留 10 秒空档，好让两张截图都拍得到；末行才是终判，
+            // CI 只认这一行 —— 前面两行是给人看的。
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
+                lines.append(contentsOf: view.runGlobeRecheckSelfTest())
+                lines.append("SELFTEST VERDICT "
+                             + (lines.contains { $0.hasPrefix("SELFTEST FAIL") } ? "FAIL" : "PASS"))
+                flush()
             }
         }
         return view

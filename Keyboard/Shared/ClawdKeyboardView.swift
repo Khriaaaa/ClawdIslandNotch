@@ -188,28 +188,43 @@ final class ClawdKeyboardView: UIView {
         }
     }
 
-    /// 模拟器自检：真的走一遍「从字母页点第四行的表情键」，再关一次地球键。
-    /// 返回两行结果（同时 print 一份），宿主落盘给 CI 读。
-    /// 越界那条要是回来了，这里会直接崩，CI 就看不到 SELFTEST OK。
+    /// 模拟器自检第一段：真的走一遍「从字母页点第四行的表情键」。
+    /// 越界那条要是回来了，这里会直接崩，CI 就看不到结果文件。
+    ///
+    /// 自己作判定，不只是把数字打出来 —— 光打印的话，哪天 `perform(.toEmoji)`
+    /// 里的切页被改坏，文本照样好看（`34 键 -> 34 键，停在 letters 页`），
+    /// CI 照样绿。一个自己不作判定的测试比没有测试更坏。
     func runEmojiTapSelfTest() -> [String] {
         guard page == .letters else { return ["SELFTEST FAIL 自检要在字母页起跑，当前是 \(page)"] }
         guard let index = keyViews.firstIndex(where: { $0.spec.action == .toEmoji }) else {
             return ["SELFTEST FAIL 字母页里找不到表情键"]
         }
-        var out: [String] = []
 
         let before = keyViews.count
         tapKey(at: index)
-        out.append("SELFTEST OK 点第 \(index) 颗（表情）\(before) 键 -> \(keyViews.count) 键，停在 \(page) 页")
+        guard page == .emoji, keyViews.count != before else {
+            return ["SELFTEST FAIL 点了表情键没切页：\(before) 键 -> \(keyViews.count) 键，停在 \(page) 页"]
+        }
+        let line = "SELFTEST OK 点第 \(index) 颗（表情）\(before) 键 -> \(keyViews.count) 键，停在 \(page) 页"
+        print(line)
+        return [line]
+    }
 
-        // 第二段：地球键的去留是 buildRows 里定死的，验证 didSet 会不会重建
+    /// 第二段：地球键的去留是 `buildRows()` 里定死的键集合，`didSet` 得把已经
+    /// 建好的表情页重建掉。宿主故意晚 10 秒才跑这段 —— 中间那张截图要拍到
+    /// 「底行带地球」那版，两张都留证据。
+    func runGlobeRecheckSelfTest() -> [String] {
+        guard page == .emoji, needsInputModeSwitchKey else {
+            return ["SELFTEST FAIL 第二段要在带地球的表情页上跑，当前 \(page) 页 / 地球 \(needsInputModeSwitchKey)"]
+        }
         let withGlobe = keyViews.count
         needsInputModeSwitchKey = false
-        let verdict = keyViews.count == withGlobe ? "没重建，didSet 漏了" : "已重建"
-        out.append("SELFTEST OK2 关掉地球 \(withGlobe) 键 -> \(keyViews.count) 键（\(verdict)）")
-
-        out.forEach { print($0) }
-        return out
+        guard keyViews.count == withGlobe - 1 else {
+            return ["SELFTEST FAIL 关掉地球后底行没按预期变：\(withGlobe) 键 -> \(keyViews.count) 键（应少一颗）"]
+        }
+        let line = "SELFTEST OK2 关掉地球 \(withGlobe) 键 -> \(keyViews.count) 键（已重建）"
+        print(line)
+        return [line]
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
