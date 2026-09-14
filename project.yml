@@ -26,7 +26,10 @@ settings:
     SWIFT_VERSION: "5.9"
     IPHONEOS_DEPLOYMENT_TARGET: "17.0"
     CODE_SIGN_STYLE: Automatic
-    TARGETED_DEVICE_FAMILY: "1"
+    # 注意：TARGETED_DEVICE_FAMILY 不能只写在这里。XcodeGen 的 iOS preset 会在
+    # **target 级**设 `TARGETED_DEVICE_FAMILY = 1,2`，target 设置压过 project 设置 ——
+    # 写在这层等于死设置，产物里仍会声明 iPad（UIDeviceFamily=[1,2]），
+    # 并因只支持竖屏而多一条 orientation 警告。三个 target 各自写一遍才生效。
     # 真机跑必须有自己的 Team。命令行没配也没关系，Xcode 里选一下即可。
     # DEVELOPMENT_TEAM: XXXXXXXXXX
 
@@ -74,6 +77,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.clawd.island
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1"
     dependencies:
       - target: ClawdWidgetExtension
         embed: true
@@ -104,7 +108,10 @@ targets:
           NSExtensionPointIdentifier: com.apple.keyboard-service
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
           NSExtensionAttributes:
-            IsASCIICapable: true
+            # 不写 IsASCIICapable: true。引擎确实只出 ASCII，但键盘的「中英」切换默认
+            # 走全角标点（KeyboardSpec.punctText(chinese: true) 在中文态返回「。」），
+            # 声明「只出 ASCII」和默认行为对不上。要么默认改半角、要么去掉这句声明 ——
+            # 这里选后者：不声称做不到的事。
             PrefersRightToLeft: false
             # 引擎目前只出 ASCII（拼音引擎是另一个量级的工程）。声明 zh-Hans 会把自己
             # 塞进用户的中文输入法列表里，切过来发现打不出一个汉字，上架也留把柄。
@@ -114,6 +121,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.clawd.island.keyboard
+        TARGETED_DEVICE_FAMILY: "1"
         SKIP_INSTALL: YES
     entitlements:
       path: Keyboard/ClawdKeyboard.entitlements
@@ -151,6 +159,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.clawd.island.widget
+        TARGETED_DEVICE_FAMILY: "1"
         SKIP_INSTALL: YES
 
 schemes:

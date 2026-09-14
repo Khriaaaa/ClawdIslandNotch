@@ -96,6 +96,12 @@ jobs:
                       # （上一版是靠误把字节解成巨大 pt 才红，属于「顺带没炸」）。
                       bad.append(f"{name}: {it['filename']} 不是 PNG（魔数不对）")
                       continue
+                  if len(head) < 24:
+                      # 只有魔数、后面没内容的假 PNG。不挡的话下一行 `unpack` 会抛
+                      # 未捕获的 struct.error —— 方向安全（退出码 1、步骤红），
+                      # 但报错不是 ASSET FAIL，排查要绕远。
+                      bad.append(f"{name}: {it['filename']} 短于 24 字节，读不出尺寸")
+                      continue
                   w, h = unpack(">II", head[16:24])
                   pt = max(pt, w / px, h / px)
               if pt <= 0:
@@ -104,12 +110,52 @@ jobs:
               for pre, lim in budget.items():
                   if name.startswith(pre) and pt > lim:
                       over.append(f"{name}: 最大点尺寸 {pt:.1f}pt 超过 {pre} 一档的 {lim}pt 区域尺寸")
+          # AppIcon 是「声明了却没有图」的第二个现场，而且普通 .imageset 的扫描扫不到它：
+          # appiconset 只有一个 1024 槽位、没写 filename 时，产物里不会有 CFBundleIconName，
+          # 装到真机上是系统灰白占位图标。不报错、不崩，只有看图才发现 —— 和岛上那块灰方块
+          # 同一类，所以在这里一起拦。
+          ai = os.path.join(base, "AppIcon.appiconset")
+          if not os.path.isdir(ai):
+              bad.append("AppIcon.appiconset: 目录不存在")
+          else:
+              try:
+                  meta = json.load(open(os.path.join(ai, "Contents.json"), encoding="utf-8"))
+              except Exception as e:
+                  meta = None
+                  bad.append(f"AppIcon: Contents.json 读不了 ({e})")
+              imgs = (meta or {}).get("images")
+              if not isinstance(imgs, list) or not imgs:
+                  bad.append("AppIcon: images 缺失、不是列表、或为空")
+              else:
+                  named = [i for i in imgs if isinstance(i, dict) and i.get("filename")]
+                  if not named:
+                      bad.append("AppIcon: 没有任何条目带 filename -> 产物不会有图标")
+                  for it in named:
+                      p = os.path.join(ai, it["filename"])
+                      try:
+                          with open(p, "rb") as f:
+                              head = f.read(26)
+                      except OSError as e:
+                          bad.append(f"AppIcon: 读不了 {it['filename']} ({e})")
+                          continue
+                      if not head.startswith(PNG_MAGIC):
+                          bad.append(f"AppIcon: {it['filename']} 不是 PNG（魔数不对）")
+                          continue
+                      if len(head) < 24:
+                          bad.append(f"AppIcon: {it['filename']} 短于 24 字节，读不出尺寸")
+                          continue
+                      w0, h0 = unpack(">II", head[16:24])
+                      if (w0, h0) != (1024, 1024):
+                          bad.append(f"AppIcon: {it['filename']} 是 {w0}x{h0}，单尺寸图标要求 1024x1024")
+                      else:
+                          print(f"AppIcon 检查通过：{it['filename']} {w0}x{h0}")
+
           for l in bad + over:
               print("ASSET FAIL " + l)
           if bad or over:
               print(f"图片资源有 {len(bad)} 处问题、{len(over)} 处超区域尺寸")
               sys.exit(1)
-          print("资源尺寸守卫通过：每张图都有图、显式声明 scale、且未超各面区域尺寸")
+          print("资源尺寸守卫通过：每张图都有图、显式声明 scale、且未超各面区域尺寸；AppIcon 有 1024 图")
           PY
 
       - name: 真机编译（不签名）

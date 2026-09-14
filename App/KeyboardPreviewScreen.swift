@@ -89,7 +89,10 @@ struct KeyboardHostView: UIViewRepresentable {
             // 建目录 + 不吞错，写不进去就让 CI 等超时变红。
             let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
             if let docs {
-                try? FileManager.default.createDirectory(at: docs, withIntermediateDirectories: true)
+                // 这里不吞错：建不出目录后面必然写不出文件，CI 会等超时变红。
+                // 吞掉的话红的是「等不到那行」，看不出是权限/路径问题。
+                do { try FileManager.default.createDirectory(at: docs, withIntermediateDirectories: true) }
+                catch { NSLog("Clawd 自检建 Documents 目录失败：\(error)") }
             }
             let url = docs?.appendingPathComponent("selftest.txt")
             let goURL = docs?.appendingPathComponent("selftest-go2")
@@ -111,13 +114,21 @@ struct KeyboardHostView: UIViewRepresentable {
             // 第二段由 CI 放信号文件触发，不靠秒数。用计时器的话，第一次写盘要是慢了，
             // CI 等到第一行时第二段可能已经跑完，shot-6 拍到的就是关掉地球那版 ——
             // 信号握手之后，shot-6 必然拍在第二段之前。
-            func waitForGo() {
+            // 信号最多等 60 秒（0.5s × 120）。原来是无上限自递归：信号不来就永久轮询、
+            // App 永不退出，只能靠 CI 那边的 40 秒超时兜底 —— 那等于把「自检卡死」
+            // 伪装成「CI 超时」，看不出是谁的问题。超时后写一行明确的失败文本。
+            func waitForGo(attempt: Int = 0) {
                 guard let goURL else { return }
                 if FileManager.default.fileExists(atPath: goURL.path) {
                     runSecondAndVerdict()
                     return
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { waitForGo() }
+                if attempt >= 120 {
+                    lines.append("SELFTEST ABORT 等 selftest-go2 信号超时 60s")
+                    flush()
+                    return
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { waitForGo(attempt: attempt + 1) }
             }
 
             // 第一段跑完停在表情页（底行带地球），CI 等的就是这一行、拍的也是这个状态

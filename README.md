@@ -27,14 +27,17 @@ xcodegen generate
 open ClawdIsland.xcodeproj
 ```
 
-生成两个 target：
+生成三个 target：
 
 | target | 类型 | 内容 |
 |---|---|---|
-| `ClawdIsland` | App | `App/` + `Core/` + `Shared/` + `Resources/` |
+| `ClawdIsland` | App | `App/` + `Core/` + `Shared/` + `Resources/` + `Keyboard/Shared` + `Keyboard/Sprites` |
+| `ClawdKeyboard` | 键盘扩展 | `Keyboard/` + 只借 `Core/ClawdState.swift`、`Core/ClawdStore.swift` |
 | `ClawdWidgetExtension` | Widget 扩展 | `Widget/` + `Core/` + `Shared/` + `Resources/` |
 
-`Core/` 和 `Shared/` 被两个 target 同时编译，这是有意的：中间层和类型契约必须两边一致。
+`Core/` 和 `Shared/` 被 App 与 Widget 两个 target 同时编译，这是有意的：中间层和类型契约
+必须两边一致。键盘扩展**不**整个挂 `Core/`：那会把 `StateServer`（Network）和
+`ActivityController` 一起编进扩展，而键盘扩展内存限额只有几十 MB、ActivityKit 在扩展里也用不了。
 
 然后：
 
@@ -149,7 +152,11 @@ curl http://<手机IP>:23333/health                                         # {"
 **为什么用静态图，不做动画。** 灵动岛空间小、更新受限流预算，而且 Live Activity 禁止
 持续动画。SVG 素材里的 SMIL / CSS 动画在 iOS 上本来也不会动。所以每个状态选一张最合适
 的 SVG 进 Assets，进场只用 SwiftUI 的 `scaleEffect` + `opacity` 做一次缩放淡入。
-资源用矢量 SVG（`preserves-vector-representation: true`），任意尺寸都不糊。
+资源是**栅格 PNG**：`svg-src/*.svg` 由 `tools/export-assets.sh` 用 `rsvg-convert` 导出，
+每个 imageset 在 `Contents.json` 里显式写 1x/2x/3x 三档。整目录没有
+`preserves-vector-representation`（0 处）—— 别按「矢量、任意尺寸都不糊」理解这套资源。
+漏写 `scale` 时同一张 900px 图会被当成 900pt，灵动岛上直接渲染成一块灰方块
+（实测：run 34852382516 的 shot-8，60x60px 纯 (81,81,81)）；CI 里有资源尺寸守卫拦这一类。
 
 **状态切换的最小展示时长。** 抄 `theme.json` 的 `timings.minDisplay`：
 `attention` 4s、`error` 5s、`sweeping` 5.5s、`notification` 5s、`carrying` 3s、
@@ -180,13 +187,14 @@ curl http://<手机IP>:23333/health                                         # {"
 
 ```
 ClawdIsland/
-  project.yml                        XcodeGen 定义（App + Widget 两个 target）
+  project.yml                        XcodeGen 定义（App + 键盘扩展 + Widget 扩展三个 target）
   README.md
   REPORT.md
   Shared/ClawdAttributes.swift       ActivityAttributes（App 与扩展共用）
   App/ClawdIslandApp.swift           @main + ClawdCoordinator（装配/事件流）
   App/ContentView.swift              状态面板 + 事件流水
   App/SettingsView.swift             端口/监听/自动实时活动/本机地址
+  App/KeyboardPreviewScreen.swift    键盘扩展那块视图原样跑在 App 里（CI 靠它截图 + 自检）
   Core/ClawdState.swift              状态枚举 + 事件/JSON 映射 + StateGate
   Core/StateServer.swift             NWListener 极简 HTTP 服务（23333-23337）
   Core/ActivityController.swift      ActivityKit start/update/end + 8 小时重建
@@ -195,7 +203,8 @@ ClawdIsland/
   Widget/ClawdLiveActivity.swift     灵动岛（compact/minimal/expanded）+ 锁屏
   Widget/ClawdHomeWidget.swift       主屏小组件（小/中）
   Widget/ClawdIntents.swift          LiveActivityIntent：唤醒 / 让它睡
-  Resources/Assets.xcassets/         27 个 imageset（16 状态大图 + 工作分档 + mini 小图）
+  Resources/Assets.xcassets/         36 个 imageset（18 大图 + 9 mini + 9 di）+ AppIcon.appiconset
+  svg-src/                           上述素材的矢量源（静态基础姿；状态差异写在 CSS 动画里）
   tools/send_state.py                命令行推状态 / 自测（纯标准库）
   tools/export-assets.sh             可选：macOS 上把 SVG 批量转 PNG
 ```

@@ -119,8 +119,11 @@ struct ClawdLockScreenView: View {
 /// **实测（不是文档结论）**：`Contents.json` 不写 `scale` 时，900px 被当成 900pt，
 /// 岛上那一格会渲染成一块灰色方块 —— run `34852382516` 的 shot-8 就是
 /// （60x60px、纯 (81,81,81)、内部零纹理）；补上 `scale` 后同一位置恢复成彩色精灵。
-/// **「点尺寸超区域尺寸 → 系统换成占位块」这条因果是推断，Apple 文档没有写**，
-/// 整页只有上面那张区域尺寸表。所以下面按档取图是工程上的保守做法，不是规范。
+/// **「点尺寸超区域尺寸 → 系统换成占位块」这条因果是推断，Apple 文档没有写。**
+/// 核过的范围：HIG live-activities 页共 30 个 heading，`image size` / `placeholder` /
+/// `budget` 三个词各出现 0 次；该页的 Specifications 表里只有各面的区域尺寸，
+/// 没有「图片分辨率预算」、也没有「超了会怎样」。所以下面按档取图是工程上的保守做法，
+/// 不是规范。（旧写法是「整页只有上面那张区域尺寸表」，把这一页说小了。）
 /// 所以紧凑态取 `clawd-di-*`（32pt），展开态与锁屏取 `clawd-mini-*`（52pt）。
 struct ClawdGlyph: View {
     let stateRaw: String

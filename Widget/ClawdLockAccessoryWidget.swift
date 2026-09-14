@@ -3,13 +3,16 @@ import SwiftUI
 
 /// 锁屏 accessory 家族。
 ///
-/// 这三个 family 是刘海机上唯一「不用打开 App 也能看到 Clawd」的常驻面：
+/// 这三个 family 是「不用打开 App 也能看到 Clawd」的常驻面之一 —— 另一处是主屏小组件
+/// `ClawdHomeWidget`（刘海机、灵动岛机都能加）：
 /// `WidgetFamily.accessoryInline` / `.accessoryRectangular` / `.accessoryCircular`
 /// （WidgetKit，iOS 16+，用户在锁屏自定义里添加）。
 ///
 /// 它们和灵动岛无关：刘海机型、灵动岛机型、甚至无刘海机型都支持。
-/// 锁屏上系统会统一做 vibrancy 处理，自定义彩色图会被压成单色/半透明；
-/// 想完全保留原色需要 iOS 18 的 widget accent 一族，部署目标是 iOS 17，这里不引。
+/// 锁屏上系统按 **vibrant** 方式呈现：保留亮度、明显去饱和/变淡，自定义彩色图不会
+/// 原样显示。想更完整地保留原色要用 iOS 18 的 widget accent 一族，部署目标 iOS 17，不引。
+/// （旧写法是「会被压成单色/半透明」，不准 —— 真做单色就看不出宠物了；这句也没有
+///   Apple 文档原句，HIG 只说 vibrant 用于锁屏/StandBy 这类低光场景。）
 struct ClawdLockAccessoryWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "ClawdLockAccessoryWidget", provider: ClawdTimelineProvider()) { entry in
@@ -56,13 +59,16 @@ struct ClawdAccessoryView: View {
     private var circular: some View {
         ZStack {
             AccessoryWidgetBackground()
-            // 显式把渲染尺寸钉在 52pt（= 素材的点尺寸）。原来只写 `.padding(6)`，
-            // 图会跟着圆形面撑到 60–64pt，把 52pt 的素材**上采样**、发软。
-            // accessory 圆形面是 76x76（430x932）/ 72x72（393x852），52 放得下。
-            Image(snapshot.state.islandGlyph)
+            // 用 144pt 的大图（`imageName`）下采样到 60pt，不用 52pt 的 `islandGlyph`。
+            // 实测：`clawd-mini-sleep-3x.png` 里宠物本体只有 146x98px（+5+29），
+            // 即 48.7x32.7pt —— 放进 72/76pt 的圆面只占 68% 宽、45% 高，看着偏小。
+            // 144 → 60 是下采样，不会软；圆面尺寸取自 HIG live-activities 的
+            // Specifications 表（72x72 @393x852 / 76x76 @430x932）。
+            // （原来只写 `.padding(6)`，图会跟圆面撑到 60–64pt，把 52pt 素材上采样。）
+            Image(snapshot.state.imageName)
                 .resizable()
                 .scaledToFit()
-                .frame(width: 52, height: 52)
+                .frame(width: 60, height: 60)
         }
         .widgetURL(NotchDeepLink.url)
     }
