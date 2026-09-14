@@ -111,10 +111,16 @@ struct ClawdLockScreenView: View {
 /// 统一的小图渲染：按 stateRaw 找资源名，找不到就退回睡眠图。
 /// `scaleEffect` 只做一次进场放大，不参与循环动画。
 ///
-/// 图分两档，因为灵动岛每一面有自己的**图片分辨率预算**（Apple HIG
-/// live-activities 的 Specifications）：紧凑态/最小态只有 62.33x36.67pt。
-/// 超过预算的图系统不报错、不崩，只是把那块换成**灰色占位方块** ——
-/// 看上去像「宠物被去色/被压成灰疙瘩」，其实是图根本没被渲染。
+/// 图分两档，因为灵动岛每一面有自己的**区域尺寸**（Apple HIG live-activities
+/// 的 Specifications）：紧凑 leading/trailing 为 62.33x36.67（430x932）/
+/// 52.33x36.67（393x852），minimal 为 36.67–45 x 36.67，expanded 与锁屏为
+/// 408x84–160（430x932）/ 371x84–160（393x852）。
+///
+/// **实测（不是文档结论）**：`Contents.json` 不写 `scale` 时，900px 被当成 900pt，
+/// 岛上那一格会渲染成一块灰色方块 —— run `34852382516` 的 shot-8 就是
+/// （60x60px、纯 (81,81,81)、内部零纹理）；补上 `scale` 后同一位置恢复成彩色精灵。
+/// **「点尺寸超区域尺寸 → 系统换成占位块」这条因果是推断，Apple 文档没有写**，
+/// 整页只有上面那张区域尺寸表。所以下面按档取图是工程上的保守做法，不是规范。
 /// 所以紧凑态取 `clawd-di-*`（32pt），展开态与锁屏取 `clawd-mini-*`（52pt）。
 struct ClawdGlyph: View {
     let stateRaw: String
@@ -131,10 +137,12 @@ struct ClawdGlyph: View {
     }
 
     var body: some View {
+        // 不写 `.renderingMode(.original)`：这批 imageset 的 `Contents.json` 里没有
+        // `template-rendering-intent`（全目录 0 处），`Image(name)` 本来就是 original，
+        // 那一行是空操作。而这些面万一被去色也是系统的 vibrancy 处理，不是 Image 的
+        // renderingMode 管得到的（iOS 18 对应的是 widgetAccentedRenderingMode 一族）。
         Image(imageName)
             .resizable()
-            // 这几个面默认按模板渲染，不加这行彩色精灵会被压成单色剪影。
-            .renderingMode(.original)
             .scaledToFit()
             .frame(width: size, height: size)
             // 只留进场缩放，不留透明度渐变：`onAppear` 在某些实时活动呈现里不一定

@@ -56,18 +56,21 @@ struct ClawdAccessoryView: View {
     private var circular: some View {
         ZStack {
             AccessoryWidgetBackground()
+            // 显式把渲染尺寸钉在 52pt（= 素材的点尺寸）。原来只写 `.padding(6)`，
+            // 图会跟着圆形面撑到 60–64pt，把 52pt 的素材**上采样**、发软。
+            // accessory 圆形面是 76x76（430x932）/ 72x72（393x852），52 放得下。
             Image(snapshot.state.islandGlyph)
                 .resizable()
                 .scaledToFit()
-                .padding(6)
+                .frame(width: 52, height: 52)
         }
         .widgetURL(NotchDeepLink.url)
     }
 
     private var rectangular: some View {
         HStack(spacing: 8) {
-            // 用 52pt 的小图而不是 144pt 的大图：accessory 家族的图片分辨率预算
-            // 比主屏小组件紧得多（约 160x76pt），超预算的图会被换成灰方块。
+            // 用 52pt 的小图而不是 144pt 的大图，渲染 32pt —— 下采样，不会软。
+            // accessory 各面：矩形 172x76 / 160x72 / 157x72，圆形 76x76 / 72x72。
             Image(snapshot.state.islandGlyph)
                 .resizable()
                 .scaledToFit()

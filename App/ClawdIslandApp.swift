@@ -58,20 +58,7 @@ extension ClawdIslandApp {
     /// （23333…23337），另一台模拟器上的 App 可能正占着 23333，推送会打进它，
     /// 目标 App 一个字节都没收到，而推送端照样拿到 200。
     static func recordReceived(_ event: ClawdEvent) {
-        guard ProcessInfo.processInfo.environment["CLAWD_LA_MARKER"] == "1" else { return }
-        guard let docs = FileManager.default.urls(for: .documentDirectory,
-                                                  in: .userDomainMask).first else { return }
-        try? FileManager.default.createDirectory(at: docs, withIntermediateDirectories: true)
-        let line = "RECEIVED \(event.state.rawValue) \(event.event ?? "-")\n"
-        let url = docs.appendingPathComponent("received.txt")
-        if let fh = try? FileHandle(forWritingTo: url) {
-            defer { try? fh.close() }
-            fh.seekToEndOfFile()
-            fh.write(Data(line.utf8))
-        } else {
-            // 第一次没有这个文件，FileHandle 打不开，直接建。
-            try? Data(line.utf8).write(to: url)
-        }
+        Diag.append("RECEIVED \(event.state.rawValue) \(event.event ?? "-")", to: "received.txt")
     }
 }
 

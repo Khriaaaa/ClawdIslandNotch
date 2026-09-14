@@ -62,6 +62,7 @@ final class ActivityController: ObservableObject {
             self.startedAt = Date()
             self.isActive = true
             self.lastError = nil
+            Diag.appliedLiveActivity(snapshot.stateRaw)
         } catch {
             self.isActive = false
             self.lastError = "开启实时活动失败：\(error.localizedDescription)"
@@ -101,8 +102,12 @@ final class ActivityController: ObservableObject {
             state: contentState(from: snapshot),
             staleDate: Date().addingTimeInterval(Self.systemLimit)
         )
+        let stateRaw = snapshot.stateRaw
         Task {
             await activity.update(content)
+            // 收条只到「HTTP 进了这个 App」为止；岛上有没有被更新是另一步。
+            // 这一行证明 ActivityKit 收下了 update。
+            Diag.appliedLiveActivity(stateRaw)
         }
         WidgetCenter.shared.reloadAllTimelines()
     }

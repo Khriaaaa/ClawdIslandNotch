@@ -72,9 +72,9 @@ enum ClawdState: String, CaseIterable, Codable, Identifiable, Hashable {
     /// 没有对应 mini 的状态就退回同名的迷你映射。
     ///
     /// 注意：这些资源是栅格 PNG，不是矢量图。`Contents.json` 必须显式写
-    /// `scale`，否则 Xcode 按单倍图算，900px 就成了 900pt，超过灵动岛各面的
-    /// 图片分辨率预算，系统会把那块换成灰方块（不报错、不崩，最难查）。
-    /// 各面预算见 `ClawdGlyph` 的注释。
+    /// `scale`，否则 Xcode 按单倍图算，900px 就成了 900pt。**实测**这种图在灵动岛
+    /// 上会显示成一块灰方块（不报错、不崩，最难查）——但「点尺寸超区域尺寸就换
+    /// 占位块」这条因果是推断，Apple 文档里没有。各面区域尺寸见 `ClawdGlyph` 的注释。
     var islandGlyph: String {
         switch self {
         case .idle: return "clawd-mini-idle"

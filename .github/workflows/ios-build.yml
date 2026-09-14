@@ -28,17 +28,23 @@ jobs:
       # 静默失败守卫：资源目录里任何一张图只要漏写 scale，Xcode 就按单倍图算，
       # 900px 的图成了 900pt，超过灵动岛各面的图片分辨率预算，系统会把那块换成
       # 灰方块 —— 不报错、不崩，只有肉眼看截图才发现。所以在这里先拦一道。
-      - name: 资源尺寸守卫（漏写 scale / 超预算直接红）
+      - name: 资源尺寸守卫（漏写 scale / 一张图都不挂 / 超区域尺寸直接红）
         run: |
           python3 - <<'PY'
           import json, os, sys
+          from struct import unpack
           base = "Resources/Assets.xcassets"
           bad, over = [], []
-          # 灵动岛/小组件各面的图片预算（pt），取最紧的一档
+          PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+          # 各面的**区域尺寸**（pt）。这不是 Apple 规定的「图片尺寸上限」——
+          # HIG 的 live-activities / widgets 两页只有区域尺寸表，没有「图片超尺寸会
+          # 怎样」这条规则；拿区域尺寸当阈值是工程上的保守做法。取各面最紧的一档：
+          # mini 会进 accessory 圆形（393x852 上是 72，不是 430x932 的 76），
+          # 大图在主屏 small 最紧是 148（375x667），不是 158。
           budget = {
               "clawd-di-": 36.67,
-              "clawd-mini-": 76.0,
-              "clawd-": 158.0,
+              "clawd-mini-": 72.0,
+              "clawd-": 148.0,
           }
           for d in sorted(os.listdir(base)):
               if not d.endswith(".imageset"):
@@ -50,33 +56,60 @@ jobs:
               except Exception as e:
                   bad.append(f"{name}: Contents.json 读不了 ({e})")
                   continue
-              imgs = meta.get("images", [])
-              if not imgs:
-                  bad.append(f"{name}: images 是空的")
+              imgs = meta.get("images")
+              if not isinstance(imgs, list) or not imgs:
+                  bad.append(f"{name}: images 缺失、不是列表、或为空")
                   continue
-              for it in imgs:
-                  if "scale" not in it:
-                      bad.append(f"{name}: 有图没写 scale -> 会被当成 1 倍图")
               # 声明的点尺寸 = 最大 px / 该图的 scale 倍数
               pt = 0.0
               for it in imgs:
-                  if "scale" not in it or "filename" not in it:
+                  if not isinstance(it, dict):
+                      bad.append(f"{name}: images 里有非对象条目")
                       continue
-                  px = int(float(it["scale"].rstrip("x")))
-                  from struct import unpack
-                  with open(os.path.join(base, d, it["filename"]), "rb") as f:
-                      head = f.read(26)
+                  if "scale" not in it:
+                      bad.append(f"{name}: 有图没写 scale -> 会被当成 1 倍图")
+                      continue
+                  if "filename" not in it:
+                      # 上一版的假绿洞：有 scale 但不挂 filename 时，算 pt 那一步会把
+                      # 这条跳过，pt 恒为 0，脚本照样打印「通过」。声明了 scale 却没有
+                      # 图，不等于「这张图合格」。
+                      bad.append(f"{name}: 有 scale 却没写 filename -> 这一档其实没有图")
+                      continue
+                  raw_scale = str(it["scale"])
+                  try:
+                      px = int(float(raw_scale.rstrip("x")))
+                  except ValueError:
+                      bad.append(f"{name}: scale 值看不懂 -> {raw_scale}")
+                      continue
+                  if px <= 0:
+                      bad.append(f"{name}: scale 是 {raw_scale}")
+                      continue
+                  path = os.path.join(base, d, it["filename"])
+                  try:
+                      with open(path, "rb") as f:
+                          head = f.read(26)
+                  except OSError as e:
+                      bad.append(f"{name}: 读不了 {it['filename']} ({e})")
+                      continue
+                  if not head.startswith(PNG_MAGIC):
+                      # 只认魔数。改成 .png 的 JPEG/纯文本会被这里挡住
+                      # （上一版是靠误把字节解成巨大 pt 才红，属于「顺带没炸」）。
+                      bad.append(f"{name}: {it['filename']} 不是 PNG（魔数不对）")
+                      continue
                   w, h = unpack(">II", head[16:24])
                   pt = max(pt, w / px, h / px)
+              if pt <= 0:
+                  bad.append(f"{name}: 一个可用的图片条目都没有，点尺寸算出来是 0")
+                  continue
               for pre, lim in budget.items():
                   if name.startswith(pre) and pt > lim:
-                      over.append(f"{name}: 最大点尺寸 {pt:.1f}pt 超过 {pre} 一档的 {lim}pt 预算")
+                      over.append(f"{name}: 最大点尺寸 {pt:.1f}pt 超过 {pre} 一档的 {lim}pt 区域尺寸")
           for l in bad + over:
               print("ASSET FAIL " + l)
           if bad or over:
-              print(f"图片资源有 {len(bad)} 处漏写 scale、{len(over)} 处超预算")
+              print(f"图片资源有 {len(bad)} 处问题、{len(over)} 处超区域尺寸")
               sys.exit(1)
-          print("资源尺寸守卫通过：每张图都显式声明 scale 且未超各面预算")
+          print("资源尺寸守卫通过：每张图都有图、显式声明 scale、且未超各面区域尺寸")
           PY
 
       - name: 真机编译（不签名）
@@ -399,7 +432,11 @@ jobs:
           xcrun simctl install "$DI" build-sim-kb/Build/Products/Debug-iphonesimulator/ClawdIsland.app
           CONT=$(xcrun simctl get_app_container "$DI" com.clawd.island data)
           M="$CONT/Documents/live-activity.txt"
-          rm -f "$M"
+          # 收条/应用标记也要先删干净：上面 uninstall 带 `|| true`，容器没删掉时
+          # 复用 runner 上会留上一轮的旧文件，给这一轮顶包。
+          R="$CONT/Documents/received.txt"
+          A="$CONT/Documents/la-applied.txt"
+          rm -f "$M" "$R" "$A"
           SIMCTL_CHILD_CLAWD_LA_MARKER=1 xcrun simctl launch "$DI" com.clawd.island || echo "launch 失败"
           # 实时活动起没起来由 App 写出来，不靠看图猜。等不到就是没起来，直接红。
           i=0
@@ -419,7 +456,6 @@ jobs:
             --cwd "/Users/dev/pay" --tool-name "Bash" --tool-use-id toolu_ci_la
           # 证据：目标 App 自己写的收条。推送端返回 200 只能证明「有人收了」，
           # 证明不了「这一台收了」—— 上一版就是栽在这个区别上：200 是隔壁那台回的。
-          R="$CONT/Documents/received.txt"
           i=0
           while [ "$i" -lt 20 ]; do
             if [ -s "$R" ] && grep -q "^RECEIVED working" "$R"; then break; fi
@@ -429,7 +465,20 @@ jobs:
           echo "=== 目标 App 的收条 ==="
           cat "$R" 2>/dev/null || echo "（收条文件不存在）"
           grep -q "^RECEIVED working" "$R" 2>/dev/null || {
-            echo "灵动岛那台的 App 没收到这条状态，截图里的状态不可信"; exit 1; }
+          echo "灵动岛那台的 App 没收到这条状态，截图里的状态不可信"; exit 1; }
+          # 再近一步：收条只到「HTTP 进了这个 App」为止。中间 ActivityController 里
+          # `await activity.update(...)` 是异步、无回执的 —— 收条在、岛上没画出来的
+          # 情况是存在的。这条标记在 update/request 返回之后写，证明 ActivityKit 收下了。
+          i=0
+          while [ "$i" -lt 20 ]; do
+          if [ -s "$A" ] && grep -q "^LA APPLIED working" "$A"; then break; fi
+          sleep 1
+          i=$((i + 1))
+          done
+          echo "=== 实时活动应用标记（update 之后）==="
+          cat "$A" 2>/dev/null || echo "（应用标记不存在）"
+          grep -q "^LA APPLIED working" "$A" 2>/dev/null || {
+          echo "收条到了但实时活动没被更新过，岛上画的不一定是 working"; exit 1; }
           sleep 6
           # 把 App 送到后台，灵动岛才会显示实时活动的紧凑态（前台时岛上不显示自己的活动）
           xcrun simctl launch "$DI" com.apple.Preferences || echo "切后台失败"
