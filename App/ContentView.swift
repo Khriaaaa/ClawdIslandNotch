@@ -29,8 +29,12 @@ struct ContentView: View {
 
     /// CI 用的首帧证据：每张截图都自称是某个 tab 的状态，但原来只是 sleep 十几秒
     /// 就拍 —— 启动崩了、或渲染停在别的页，拍成主屏 job 照样是绿的。
-    /// 打开 CLAWD_FRAME_MARKER=1，App 在首帧提交之后把当前 tab 写出来，CI 等这个
-    /// 文件并按 tab 号判定：图上是什么状态由 App 自己说，不靠时间猜。
+    /// 打开 CLAWD_FRAME_MARKER=1，App 在 `.onAppear` 之后固定 2.5 秒把当前 tab 写出来，
+    /// CI 等这个文件并按 tab 号判定：图上是什么状态由 App 自己说，不靠时间猜。
+    ///
+    /// 说准确点：这 2.5 秒只是「等渲染」，**没有和「首帧提交」这个事件挂钩** ——
+    /// 渲染慢过 2.5 秒时标记会先于首帧写出。后面还有十几秒才截图，功能上安全，
+    /// 但别把这句读成「已经确认首帧画完了」。
     private func writeFrameMarker() {
         guard ProcessInfo.processInfo.environment["CLAWD_FRAME_MARKER"] == "1" else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
