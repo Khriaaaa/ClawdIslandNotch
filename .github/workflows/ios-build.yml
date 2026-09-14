@@ -339,12 +339,18 @@ jobs:
           echo "=== 实时活动标记 ==="
           cat "$M" || { echo "标记没写出来：App 没起，或 Activity.request 卡住了"; exit 1; }
           grep -q "^LIVEACTIVITY ACTIVE" "$M" || { echo "实时活动没起来，灵动岛上不会有东西"; exit 1; }
-          # 推一条「干活中」，让岛上显示的是有内容的状态而不是默认空态
+          # 推之前先把刘海机那台的 App 停掉：两台模拟器共用宿主网络，刘海机的
+          # App 一直占着 23333，上一版这条推送其实打进了它，灵动岛那台什么都没收到
+          # （截图里岛上还是自己的默认「睡觉」，就是这么来的）。
+          xcrun simctl terminate "$D" com.clawd.island || true
+          sleep 2
+          # 推一条「干活中」，让岛上显示的是有内容的状态而不是默认空态。
+          # 这条不再吞失败：打不进任何端口就说明岛上不会有状态，图不可信。
           python3 tools/send_state.py --host 127.0.0.1 --state working --event PreToolUse \
             --agent-id openclaw --hook-source send_state.py \
             --session-id sess-ci-la --session-title "重构支付模块" \
-            --cwd "/Users/dev/pay" --tool-name "Bash" --tool-use-id toolu_ci_la || echo "推送失败（不影响截图）"
-          sleep 5
+            --cwd "/Users/dev/pay" --tool-name "Bash" --tool-use-id toolu_ci_la
+          sleep 10
           # 把 App 送到后台，灵动岛才会显示实时活动的紧凑态（前台时岛上不显示自己的活动）
           xcrun simctl launch "$DI" com.apple.Preferences || echo "切后台失败"
           sleep 6

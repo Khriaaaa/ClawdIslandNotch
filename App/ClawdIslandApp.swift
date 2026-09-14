@@ -45,7 +45,7 @@ extension ClawdIslandApp {
             ? "LIVEACTIVITY ACTIVE"
             : "LIVEACTIVITY INACTIVE \(activities.lastError ?? "没有错误信息")"
         do {
-            try line.write(to: docs.appendingPathComponent("live-activity.txt"),
+            try (line + "\n").write(to: docs.appendingPathComponent("live-activity.txt"),
                            atomically: true, encoding: .utf8)
         } catch {
             NSLog("实时活动标记写入失败：\(error)")

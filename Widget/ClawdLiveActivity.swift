@@ -120,12 +120,27 @@ struct ClawdGlyph: View {
     }
 
     var body: some View {
+        // 灵动岛 / 锁屏这些面默认走 vibrant 渲染：系统把彩色图按亮度压成灰。
+        // 实测（iPhone 16 Pro 模拟器，紧凑态截图）20pt 的橙棕精灵图渲染出来
+        // 饱和度 = 0、主色 (64,64,64)，腿和眼睛全糊掉 —— 宠物成了灰方块。
+        // iOS 18 起可以显式要回原色；部署目标还是 17，低版本上这仍是系统的
+        // 呈现规则，不是代码能改的（锁屏配件那边同理，见 ClawdLockAccessoryWidget）。
+        if #available(iOS 18.0, *) {
+            glyph.widgetRenderingMode(.fullColor)
+        } else {
+            glyph
+        }
+    }
+
+    private var glyph: some View {
         Image(imageName)
             .resizable()
             .scaledToFit()
             .frame(width: size, height: size)
-            .scaleEffect(appeared ? 1.0 : 0.75)
-            .opacity(appeared ? 1.0 : 0.4)
+            // 只留进场缩放，不留透明度渐变：`onAppear` 在某些实时活动呈现里不一定
+            // 触发，一旦不触发，`opacity(0.4)` 就会把宠物永久卡在半透明 —— 实测
+            // 紧凑态那块亮度对得上 40%。缩放即使没跑，最坏也只是小一圈，不会变暗。
+            .scaleEffect(appeared ? 1.0 : 0.85)
             .onAppear {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
                     appeared = true

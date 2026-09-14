@@ -38,7 +38,7 @@ struct ContentView: View {
                                                       in: .userDomainMask).first else { return }
             try? FileManager.default.createDirectory(at: docs, withIntermediateDirectories: true)
             do {
-                try "FRAME READY tab=\(selection)"
+                try "FRAME READY tab=\(selection)\n"
                     .write(to: docs.appendingPathComponent("frame.txt"),
                            atomically: true, encoding: .utf8)
             } catch {
