@@ -53,18 +53,21 @@ final class ClawdKeyboardView: UIView {
         separator.frame = CGRect(x: 0, y: KeyboardMetrics.stripHeight,
                                  width: width, height: KeyboardMetrics.separatorHeight)
 
+        // 所有行共用同一个基准键宽，行内居中 —— 系统键盘就是这么摆的：
+        // 9 键那行不是把按键撑胖，而是保持同宽、整体缩进。
+        let maxKeys = rows.map(\.count).max() ?? 10
+        let baseUnit = KeyboardMetrics.baseUnitWidth(forTotalWidth: width, maxKeys: maxKeys)
+
         var y = KeyboardMetrics.stripHeight + KeyboardMetrics.separatorHeight + KeyboardMetrics.topPadding
         var index = 0
 
         for row in rows {
-            let totalUnits = row.reduce(CGFloat(0)) { $0 + $1.units }
             let gaps = KeyboardMetrics.keySpacing * CGFloat(max(0, row.count - 1))
-            let usable = width - KeyboardMetrics.sidePadding * 2 - gaps
-            let unit = usable / max(totalUnits, 0.001)
+            let rowWidth = row.reduce(CGFloat(0)) { $0 + $1.units } * baseUnit + gaps
+            var x = (width - rowWidth) / 2
 
-            var x = KeyboardMetrics.sidePadding
             for spec in row {
-                let keyWidth = unit * spec.units
+                let keyWidth = baseUnit * spec.units
                 keyViews[index].frame = CGRect(x: x, y: y, width: keyWidth,
                                                height: KeyboardMetrics.rowHeight)
                 x += keyWidth + KeyboardMetrics.keySpacing

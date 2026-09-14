@@ -40,16 +40,28 @@ struct KeySpec: Equatable {
 }
 
 /// 键盘尺寸。全部用代码算，不走 Auto Layout —— 键盘要的是快和可预测。
+///
+/// 这几个数不是拍脑袋来的，是拿一张 375×812 pt(@3x) 的真机截图逐像素量出来的：
+/// 工具条 42~45、字母键行高 44.7、键宽 29.1、水平键距 8.46、行距 12.7~13、
+/// 十键行左右边距 4、九键行左右边距 23（行内居中而不是撑满）。
+/// 这套总数 278pt，跟截图里键盘顶边到底边完全对上。
 enum KeyboardMetrics {
-    static let stripHeight: CGFloat = 56        // Clawd 的活动范围
+    static let stripHeight: CGFloat = 44        // Clawd 的活动范围，对齐系统那条工具条
     static let separatorHeight: CGFloat = 1
     static let topPadding: CGFloat = 7
     static let bottomPadding: CGFloat = 7
-    static let rowHeight: CGFloat = 43
-    static let rowSpacing: CGFloat = 6
-    static let keySpacing: CGFloat = 6
-    static let sidePadding: CGFloat = 3
+    static let rowHeight: CGFloat = 45
+    static let rowSpacing: CGFloat = 13         // 纵向比横向松，这是 iOS 的手感来源
+    static let keySpacing: CGFloat = 8.5
+    static let sidePadding: CGFloat = 4
     static let cornerRadius: CGFloat = 5
+
+    /// 基准键宽：拿最多键的那一行算，其余行沿用同一个宽度再整行居中。
+    /// 第二行只有 9 键，如果按剩余宽度平摊就会比第一行胖，一眼假。
+    static func baseUnitWidth(forTotalWidth width: CGFloat, maxKeys: Int) -> CGFloat {
+        let gaps = keySpacing * CGFloat(max(0, maxKeys - 1))
+        return (width - sidePadding * 2 - gaps) / CGFloat(max(maxKeys, 1))
+    }
 
     static var totalHeight: CGFloat {
         stripHeight + separatorHeight + topPadding + rowHeight * 4 + rowSpacing * 3 + bottomPadding
