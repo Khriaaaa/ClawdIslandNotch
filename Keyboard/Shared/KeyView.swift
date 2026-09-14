@@ -109,12 +109,16 @@ final class KeyView: UIView {
     }
 
     private func setLabelText() {
+        // UILabel.font 是隐式解包可选。直接塞进 [NSAttributedString.Key: Any] 不会被解包
+        // （SE-0054 只在需要非可选的上下文才插 !），装进去的是 Optional 装箱值。
+        // 先赋给非可选局部变量逼它解一次。
+        let baseFont: UIFont = label.font
         if let para = twoLineParagraph {
             label.attributedText = NSAttributedString(
                 string: title,
                 attributes: [.paragraphStyle: para,
                              .foregroundColor: theme.textColor(for: spec.style),
-                             .font: label.font as Any])
+                             .font: baseFont])
         } else {
             label.attributedText = nil
             label.text = title

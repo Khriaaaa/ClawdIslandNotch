@@ -82,21 +82,26 @@ final class PetStripView: UIView {
         addSubview(spriteView)
 
         // 四颗工具按钮：语言、表情、剪贴板、收起键盘
-        let items: [(KeyAction, String?, String?)] = [
-            (.nextKeyboard, nil, "文\nA"),
-            (.toEmoji, "cube", nil),
-            (.clipboard, "doc.on.clipboard", nil),
-            (.dismiss, "chevron.down", nil),
+        let items: [(KeyAction, String?, String?, String)] = [
+            (.nextKeyboard, nil, "文\nA", "切换输入法"),
+            (.toEmoji, "cube", nil, "表情"),
+            (.clipboard, "doc.on.clipboard", nil, "粘贴"),
+            (.dismiss, "chevron.down", nil, "收起键盘"),
         ]
-        toolButtons = items.map { action, symbol, text in
-            let button = ToolButton(action: action, symbol: symbol, text: text, theme: theme)
+        toolButtons = items.map { action, symbol, text, a11y in
+            let button = ToolButton(action: action, symbol: symbol, text: text,
+                                    a11y: a11y, theme: theme)
             button.addGestureRecognizer(
                 UITapGestureRecognizer(target: self, action: #selector(handleToolTap(_:))))
             addSubview(button)
             return button
         }
 
-        addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(handleTap)))
+        // 整条也能点（点哪儿都算摸一下 Clawd），但落在工具按钮上的要排掉，
+        // 不然点工具按钮的同时螃蟹还会开心一下
+        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
+        tap.delegate = self
+        addGestureRecognizer(tap)
 
         render()
         startDisplayLink()
@@ -238,5 +243,23 @@ final class PetStripView: UIView {
                 spriteView.frame.origin.x = position
             }
         }
+    }
+}
+
+// MARK: - 手势冲突
+
+extension PetStripView: UIGestureRecognizerDelegate {
+
+    /// 点工具按钮的时候，整条那颗「摸一下 Clawd」的手势不要跟着响应
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldReceive touch: UITouch) -> Bool {
+        guard gestureRecognizer.view === self else { return true }
+        var node = touch.view
+        while let v = node {
+            if v is ToolButton { return false }
+            if v === self { break }
+            node = v.superview
+        }
+        return true
     }
 }

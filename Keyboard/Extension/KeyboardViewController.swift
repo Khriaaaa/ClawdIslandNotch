@@ -73,6 +73,6 @@ final class KeyboardViewController: UIInputViewController, UIInputViewAudioFeedb
     /// 宿主 App 往 App Group 里写的 Claude Code 状态，读出来驱动 Clawd。
     /// 没开「完全访问」时读不到共享容器，那就只有当打字反应，不影响其它功能。
     private func refreshExternalState() {
-        keyboard?.setExternalState(KeyboardStateBridge.shared.currentMood())
+        keyboard?.setExternalState(KeyboardStateBridge.currentMood())
     }
 }

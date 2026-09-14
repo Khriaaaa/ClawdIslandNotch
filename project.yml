@@ -89,6 +89,11 @@ targets:
       - path: Keyboard/Shared
       - path: Keyboard/Extension
       - path: Keyboard/Sprites
+      # 只借这两个文件：读宿主 App 写进 App Group 的快照。
+      # 不整个 Core 挂进来 —— 那会把 StateServer（Network）和 ActivityController
+      # 一起编进扩展，键盘扩展内存限额只有几十 MB，而且 ActivityKit 在扩展里用不了。
+      - path: Core/ClawdState.swift
+      - path: Core/ClawdStore.swift
     info:
       path: Keyboard/Info.plist
       properties:

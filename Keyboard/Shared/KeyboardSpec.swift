@@ -152,7 +152,7 @@ enum KeyboardPages {
             KeyboardRow(keys: "qwertyuiop".map { key(String($0)) }, layout: .filled),
             KeyboardRow(keys: "asdfghjkl".map { key(String($0)) }, layout: .centered),
             KeyboardRow(keys: row3, layout: .edgePinned),
-            bottomRow(left: KeySpec(.toSymbols, title: "123", units: 1.54, style: .modifier,
+            bottomRow(left: KeySpec(.toSymbols, title: "123", units: 1.59, style: .modifier,
                                     accessibilityLabel: "数字与符号"), chinese: chinese),
         ]
     }
@@ -172,7 +172,7 @@ enum KeyboardPages {
             KeyboardRow(keys: ["-", "/", ":", ";", "(", ")", "$", "&", "@", "\""].map { key($0) },
                         layout: .centered),
             KeyboardRow(keys: row3, layout: .edgePinned),
-            bottomRow(left: KeySpec(.toLetters, title: "ABC", units: 1.54, style: .modifier,
+            bottomRow(left: KeySpec(.toLetters, title: "ABC", units: 1.59, style: .modifier,
                                     accessibilityLabel: "字母"), chinese: chinese),
         ]
     }
@@ -193,24 +193,25 @@ enum KeyboardPages {
             KeyboardRow(keys: ["€", "£", "¥", "•", "·", "°", "√", "∆", "≈"].map { key($0) },
                         layout: .centered),
             KeyboardRow(keys: row3, layout: .edgePinned),
-            bottomRow(left: KeySpec(.toLetters, title: "ABC", units: 1.54, style: .modifier,
+            bottomRow(left: KeySpec(.toLetters, title: "ABC", units: 1.59, style: .modifier,
                                     accessibilityLabel: "字母"), chinese: chinese),
         ]
     }
 
-    /// 表情页：四行八列，右下角那颗切页键换成地球。
+    /// 表情页：三行八列 + 底行。
+    /// 只能三行 —— 键盘高度是按四行算的（rowHeight * 4 + rowSpacing * 3），
+    /// 多出来的第五行会掉到视图外，既看不见也点不到。
     static func emojiPage() -> [KeyboardRow] {
         let pool = ["😀", "😄", "😅", "😂", "🙂", "😉", "😊", "😍",
                     "😘", "😜", "🤔", "😐", "😴", "😭", "😡", "🥺",
-                    "👍", "👎", "👏", "🙏", "💪", "🤝", "✌️", "👀",
-                    "❤️", "💔", "✨", "🎉", "🔥", "💡", "✅", "❌"]
+                    "👍", "👎", "👏", "🙏", "💪", "🤝", "✌️", "👀"]
         func key(_ ch: String) -> KeySpec { KeySpec(.text(ch), title: ch) }
 
-        var rows: [KeyboardRow] = stride(from: 0, to: 32, by: 8).map { start in
+        var rows: [KeyboardRow] = stride(from: 0, to: 24, by: 8).map { start in
             KeyboardRow(keys: Array(pool[start..<(start + 8)]).map { key($0) }, layout: .filled)
         }
         rows.append(KeyboardRow(keys: [
-            KeySpec(.toLetters, title: "ABC", units: 1.54, style: .modifier,
+            KeySpec(.toLetters, title: "ABC", units: 1.59, style: .modifier,
                     accessibilityLabel: "字母"),
             KeySpec(.nextKeyboard, title: "", units: 1.0, style: .modifier,
                     symbol: "globe", accessibilityLabel: "下一输入法"),

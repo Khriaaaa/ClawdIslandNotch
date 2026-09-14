@@ -153,9 +153,8 @@ final class ClawdKeyboardView: UIView {
         if keyViews[index].spec.action == .backspace {
             startBackspaceRepeat()
         }
-        // 「中英」和地球键长按 = 切输入法，跟系统那颗一个手感
-        if keyViews[index].spec.action == .toggleLanguage
-            || keyViews[index].spec.action == .nextKeyboard {
+        // 「中英」长按 = 切输入法。地球键是按下即切，不能再挂长按，不然一次按出两次
+        if keyViews[index].spec.action == .toggleLanguage {
             startInputModeTimer()
         }
     }
@@ -166,7 +165,11 @@ final class ClawdKeyboardView: UIView {
         // 手指滑走就撤掉高亮；滑到别的键不重复上字（按下即上字，滑动手势不补刀）
         let stillIn = keyViews[pressed].frame.contains(point)
         keyViews[pressed].setPressed(stillIn)
-        if !stillIn { stopBackspaceRepeat() }
+        if !stillIn {
+            stopBackspaceRepeat()
+            // 手指滑走了就别再切输入法
+            stopInputModeTimer()
+        }
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -181,11 +184,22 @@ final class ClawdKeyboardView: UIView {
         clearPress()
     }
 
+    /// 键盘在按住的时候被系统收掉，Timer 还挂在 runloop 上会继续删字
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window == nil {
+            stopBackspaceRepeat()
+            stopInputModeTimer()
+        }
+    }
+
     private func index(at point: CGPoint) -> Int? {
         keyViews.firstIndex { $0.frame.contains(point) }
     }
 
     private func press(_ index: Int) {
+        // 按下后可能已经切页重建过 keyViews，兜一道免得越界
+        guard index < keyViews.count else { return }
         clearPress()
         pressedIndex = index
         keyViews[index].setPressed(true)
@@ -234,8 +248,11 @@ final class ClawdKeyboardView: UIView {
 
     // MARK: - 按键行为
 
-    private func handle(_ spec: KeySpec) {
-        switch spec.action {
+    private func handle(_ spec: KeySpec) { perform(spec.action) }
+
+    /// 按键行为。按键和工具条按钮共用这一份，所以吃的是 KeyAction 不是 KeySpec
+    private func perform(_ action: KeyAction) {
+        switch action {
         case .text(let text):
             sink?.insert(shift.insertsUppercase ? text.uppercased() : text)
             if shift == .on { shift = .off; rebuild() }
@@ -300,15 +317,7 @@ final class ClawdKeyboardView: UIView {
         }
     }
 
-    private func handleTool(_ action: KeyAction) {
-        switch action {
-        case .toggleLanguage:
-            chinesePunctuation.toggle()
-            rebuild()
-        default:
-            handle(action)
-        }
-    }
+    private func handleTool(_ action: KeyAction) { perform(action) }
 
     // MARK: - 重建 / 主题
 
@@ -322,10 +331,19 @@ final class ClawdKeyboardView: UIView {
     }
 
     private func rebuild() {
+        // 重建后按下那颗键换了对象，高亮按 action 找回来；
+        // 不然轻则高亮消失、重则 pressedIndex 指到新页的另一颗键
+        let keep = pressedIndex.flatMap { $0 < keyViews.count ? keyViews[$0].spec.action : nil }
         buildKeys()
         // 新键的 frame 还是 .zero，不立刻排一次的话 touchesMoved 拿到的
         // 是零矩形，按下的高亮会瞬间消失
         layoutIfNeeded()
+        if let keep, let idx = keyViews.firstIndex(where: { $0.spec.action == keep }) {
+            pressedIndex = idx
+            keyViews[idx].setPressed(true)
+        } else {
+            pressedIndex = nil
+        }
     }
 
     private func buildKeys() {

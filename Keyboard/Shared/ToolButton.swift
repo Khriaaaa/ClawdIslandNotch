@@ -11,7 +11,7 @@ final class ToolButton: UIView {
     private let action: KeyAction
     private var theme: KeyboardTheme
 
-    init(action: KeyAction, symbol: String?, text: String?, theme: KeyboardTheme) {
+    init(action: KeyAction, symbol: String?, text: String?, a11y: String, theme: KeyboardTheme) {
         self.action = action
         self.theme = theme
         super.init(frame: .zero)
@@ -42,7 +42,9 @@ final class ToolButton: UIView {
 
         isAccessibilityElement = true
         accessibilityTraits = .button
-        accessibilityLabel = text?.replacingOccurrences(of: "\n", with: "") ?? "工具"
+        // 只有 SF Symbol 的按钮拿不到文字，光靠 text 会让表情/剪贴板/收起
+        // 三颗在 VoiceOver 里全叫「工具」
+        accessibilityLabel = a11y
 
         apply(theme: theme)
     }
