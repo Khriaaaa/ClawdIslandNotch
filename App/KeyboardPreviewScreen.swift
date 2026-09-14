@@ -78,6 +78,20 @@ struct KeyboardHostView: UIViewRepresentable {
         // 真机上系统多半会说要能切输入法，预览里也按 true 画，好让截图带上那颗地球角标
         view.needsInputModeSwitchKey = true
         view.onKeySound = { UIDevice.current.playInputClick() }
+
+        // CI 自检：simctl 没有 tap 命令，截图又只是静止画面，「点第四行表情键」
+        // 那条路径从来没被跑过 —— pi 第三轮抓到的越界崩就是这么漏出去的。
+        // 打开 CLAWD_KB_SELFTEST=1 就让宿主真的走一遍那段代码，结果落盘给 CI 读。
+        if ProcessInfo.processInfo.environment["CLAWD_KB_SELFTEST"] == "1" {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                let lines = view.runEmojiTapSelfTest()
+                guard let dir = FileManager.default.urls(for: .documentDirectory,
+                                                         in: .userDomainMask).first else { return }
+                try? lines.joined(separator: "\n").write(
+                    to: dir.appendingPathComponent("selftest.txt"),
+                    atomically: true, encoding: .utf8)
+            }
+        }
         return view
     }
 

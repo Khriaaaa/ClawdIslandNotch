@@ -30,7 +30,15 @@ final class ClawdKeyboardView: UIView {
 
     /// 系统说需要能切输入法时，在「中英」那颗键上挂个地球角标
     var needsInputModeSwitchKey = false {
-        didSet { applyInputModeBadge() }
+        didSet {
+            guard oldValue != needsInputModeSwitchKey else { return }
+            applyInputModeBadge()
+            // 表情页底行那颗地球的「在不在」是 buildRows() 里定死的键集合，
+            // 光刷角标改不了已经建好的页。同一台键盘从「要切输入法」的输入框
+            // 换到「不要」的输入框（viewWillAppear 会重设这个值）时就会露馅：
+            // 底行停在旧形态，直到用户手动切一次页。
+            if page == .emoji { rebuild() }
+        }
     }
 
     let strip = PetStripView(frame: .zero)
@@ -152,10 +160,20 @@ final class ClawdKeyboardView: UIView {
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let point = touches.first?.location(in: self),
               let index = index(at: point) else { return }
+        tapKey(at: index)
+    }
+
+    /// 按下第 index 颗键。从 touchesBegan 里抽出来，为的是让模拟器自检
+    /// （runEmojiTapSelfTest）调的是**同一段代码**，不是照抄一份。
+    /// simctl 没有 tap 命令，CI 又是靠截静止画面，这颗键以前从来没被点过 ——
+    /// pi 第三轮抓到的越界崩就是这么漏出去的。
+    func tapKey(at index: Int) {
+        guard index >= 0, index < keyViews.count else { return }
 
         // action 必须先取走再 press：press → handle → 切页 rebuild() 会把
         // keyViews 整个换成新页的数组，之后再用旧 index 下标就崩。
-        // 点第四行表情键就是这条：字母页 34 键、index 29，切到表情页只剩 28 键。
+        // 点第四行表情键就是这条：字母页 34 键、index 29，切到表情页只剩 27/28 键
+        // （底行那颗地球按 needsInputModeSwitchKey 决定在不在）。
         let action = keyViews[index].spec.action
         press(index)
 
@@ -168,6 +186,30 @@ final class ClawdKeyboardView: UIView {
         if action == .toggleLanguage, needsInputModeSwitchKey {
             startInputModeTimer()
         }
+    }
+
+    /// 模拟器自检：真的走一遍「从字母页点第四行的表情键」，再关一次地球键。
+    /// 返回两行结果（同时 print 一份），宿主落盘给 CI 读。
+    /// 越界那条要是回来了，这里会直接崩，CI 就看不到 SELFTEST OK。
+    func runEmojiTapSelfTest() -> [String] {
+        guard page == .letters else { return ["SELFTEST FAIL 自检要在字母页起跑，当前是 \(page)"] }
+        guard let index = keyViews.firstIndex(where: { $0.spec.action == .toEmoji }) else {
+            return ["SELFTEST FAIL 字母页里找不到表情键"]
+        }
+        var out: [String] = []
+
+        let before = keyViews.count
+        tapKey(at: index)
+        out.append("SELFTEST OK 点第 \(index) 颗（表情）\(before) 键 -> \(keyViews.count) 键，停在 \(page) 页")
+
+        // 第二段：地球键的去留是 buildRows 里定死的，验证 didSet 会不会重建
+        let withGlobe = keyViews.count
+        needsInputModeSwitchKey = false
+        let verdict = keyViews.count == withGlobe ? "没重建，didSet 漏了" : "已重建"
+        out.append("SELFTEST OK2 关掉地球 \(withGlobe) 键 -> \(keyViews.count) 键（\(verdict)）")
+
+        out.forEach { print($0) }
+        return out
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {

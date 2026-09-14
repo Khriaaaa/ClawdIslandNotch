@@ -189,6 +189,26 @@ jobs:
           xcrun simctl io "$D" screenshot shot-5-keyboard.png
           ls -lh shot-5-keyboard.png
 
+      - name: 功能 6 —— 表情页 + 自检（真的点一次第四行的表情键）
+        run: |
+          set -e
+          D="${{ steps.sim.outputs.device }}"
+          # 补上一轮的漏：CI 只截字母页的静止画面，simctl 也没有 tap 命令，
+          # 所以「点表情键」那条路径从来没被跑过 —— 真机上每次点都崩，CI 却是绿的。
+          # 自检会真的走一遍那段代码，走完停在表情页，正好把这个页面也截下来
+          # （底行是 3 颗还是 4 颗，光靠手算不如看一眼）。
+          # 复用 build-sim-kb 那份产物：自检是运行时环境变量控制的，不用重编。
+          xcrun simctl terminate "$D" com.clawd.island || true
+          xcrun simctl install "$D" build-sim-kb/Build/Products/Debug-iphonesimulator/ClawdIsland.app
+          SIMCTL_CHILD_CLAWD_KB_SELFTEST=1 xcrun simctl launch "$D" com.clawd.island || echo "launch 失败"
+          sleep 22
+          xcrun simctl io "$D" screenshot shot-6-keyboard-emoji.png
+          ls -lh shot-6-keyboard-emoji.png
+          CONT=$(xcrun simctl get_app_container "$D" com.clawd.island data)
+          echo "=== 自检结果 ==="
+          cat "$CONT/Documents/selftest.txt" || { echo "自检结果文件没写出来"; exit 1; }
+          grep -q "SELFTEST OK" "$CONT/Documents/selftest.txt" || { echo "自检没过：没看到 SELFTEST OK"; exit 1; }
+
       - name: 失败时抓崩溃日志
         if: failure()
         run: |
