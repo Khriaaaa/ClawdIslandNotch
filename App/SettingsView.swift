@@ -84,7 +84,7 @@ struct SettingsView: View {
                                 .frame(width: 28, height: 28)
                             Text(state.title)
                             Spacer()
-                            Text("优先级 \(state.priority)")
+                            Text("优先级 \(String(state.priority))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

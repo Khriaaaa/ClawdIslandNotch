@@ -115,7 +115,7 @@ struct StatusTab: View {
                 Label(coordinator.serverEnabled ? "本地监听已开启" : "监听已停止",
                       systemImage: coordinator.serverEnabled ? "dot.radiowaves.left.and.right" : "wifi.slash")
                 Spacer()
-                Text(server.boundPort.map { "\($0)" } ?? "—")
+                Text(verbatim: server.boundPort.map { String($0) } ?? "—")
                     .font(.system(.body, design: .monospaced))
             }
 
@@ -163,7 +163,7 @@ struct StatusTab: View {
             Text("POST  http://<本机局域网IP>:\(server.boundPort.map { String($0) } ?? "23333")/state")
                 .font(.system(.footnote, design: .monospaced))
                 .textSelection(.enabled)
-            Text("响应头会带 x-clawd-server: clawd-on-desk，代理插件靠它确认对端。已接收 \(server.requestCount) 条。")
+            Text("响应头会带 x-clawd-server: clawd-on-desk，代理插件靠它确认对端。已接收 \(String(server.requestCount)) 条。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
