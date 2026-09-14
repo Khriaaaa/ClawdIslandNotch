@@ -201,7 +201,12 @@ enum KeyboardPages {
     /// 表情页：三行八列 + 底行。
     /// 只能三行 —— 键盘高度是按四行算的（rowHeight * 4 + rowSpacing * 3），
     /// 多出来的第五行会掉到视图外，既看不见也点不到。
-    static func emojiPage() -> [KeyboardRow] {
+    ///
+    /// 这页没有「中英」键，切换输入法只能靠底行那颗地球，所以它得跟
+    /// `needsInputModeSwitchKey` 走：只有一套输入法时它是个按了没反应的键
+    /// （另外两处已经统一 gate 过了 —— 计时器和角标）。去掉之后 `.filled`
+    /// 会把宽度重新摊给剩下的三颗键，不用手改 units。
+    static func emojiPage(showInputModeSwitchKey: Bool) -> [KeyboardRow] {
         let pool = ["😀", "😄", "😅", "😂", "🙂", "😉", "😊", "😍",
                     "😘", "😜", "🤔", "😐", "😴", "😭", "😡", "🥺",
                     "👍", "👎", "👏", "🙏", "💪", "🤝", "✌️", "👀"]
@@ -210,14 +215,19 @@ enum KeyboardPages {
         var rows: [KeyboardRow] = stride(from: 0, to: 24, by: 8).map { start in
             KeyboardRow(keys: Array(pool[start..<(start + 8)]).map { key($0) }, layout: .filled)
         }
-        rows.append(KeyboardRow(keys: [
+        var bottom: [KeySpec] = [
             KeySpec(.toLetters, title: "ABC", units: 1.59, style: .modifier,
                     accessibilityLabel: "字母"),
-            KeySpec(.nextKeyboard, title: "", units: 1.0, style: .modifier,
-                    symbol: "globe", accessibilityLabel: "下一输入法"),
+        ]
+        if showInputModeSwitchKey {
+            bottom.append(KeySpec(.nextKeyboard, title: "", units: 1.0, style: .modifier,
+                                  symbol: "globe", accessibilityLabel: "下一输入法"))
+        }
+        bottom.append(contentsOf: [
             KeySpec(.space, title: "空格", units: 3.66, style: .space, accessibilityLabel: "空格"),
             KeySpec(.newline, title: "换行", units: 2.34, style: .primary, accessibilityLabel: "回车"),
-        ], layout: .filled))
+        ])
+        rows.append(KeyboardRow(keys: bottom, layout: .filled))
         return rows
     }
 }

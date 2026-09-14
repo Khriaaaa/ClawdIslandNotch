@@ -23,18 +23,25 @@ enum KeyboardStateBridge {
         return mood(for: snapshot.state)
     }
 
-    /// ClawdState 有 16 个值，活动条只有 6 个姿势，这里做归并。
-    /// 静息那一档返回 nil：那些姿势交给活动条自己演（打字、走动、睡着），
-    /// App 侧没有值得抢镜的信息时不该去接管它。
+    /// ClawdState 有 16 个值，活动条只有 6 个姿势，这里做归并：
+    /// 只有「Claude 正忙」和「Claude 要人」值得抢镜，其余一律 nil，把姿势交回
+    /// 活动条自己演（打字、走动、45 秒睡着）。
+    ///
+    /// 静息那两档（idle/roam/waking/collapsing/dizzy 与 sleeping/dozing/yawning）
+    /// 必须都返回 nil。后者尤其容易写错：`SessionEnd` 落到 `.sleeping`
+    /// （Core/ClawdState.swift），而一次会话正常结束时快照的 updatedAt 就停在这
+    /// 一刻、`autoReturnSeconds` 是 nil 也不会被重新 save，于是这条「外部 sleep」
+    /// 会钉住整整 staleAfter（10 分钟）—— 用户换到别的 App 打字，`petDidType`
+    /// 把 mood 设成 .typing，下一帧就被 setMood(external) 按回 .sleeping，
+    /// 表现成「敲一下键盘闪五帧睡觉」。Claude 睡了恰恰等于没有值得抢镜的信息。
     static func mood(for state: ClawdState) -> PetStripView.Mood? {
         switch state {
         case .working, .juggling, .sweeping, .carrying, .thinking:
             return .typing
         case .attention, .error, .notification:
             return .alert
-        case .sleeping, .dozing, .yawning:
-            return .sleeping
-        case .idle, .roam, .waking, .collapsing, .dizzy:
+        case .idle, .roam, .waking, .collapsing, .dizzy,
+             .sleeping, .dozing, .yawning:
             return nil
         }
     }

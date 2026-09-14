@@ -195,12 +195,15 @@ final class ClawdKeyboardView: UIView {
         clearPress()
     }
 
-    /// 键盘在按住的时候被系统收掉，Timer 还挂在 runloop 上会继续删字
+    /// 键盘在按住的时候被系统收掉，Timer 还挂在 runloop 上会继续删字；
+    /// pressedIndex 是唯一会跨 rebuild() 活下来的触摸状态，UIKit 不递
+    /// touchesCancelled 的话高亮会留在键上，下次弹键盘那颗键还亮着
     override func didMoveToWindow() {
         super.didMoveToWindow()
         if window == nil {
             stopBackspaceRepeat()
             stopInputModeTimer()
+            clearPress()
         }
     }
 
@@ -343,7 +346,7 @@ final class ClawdKeyboardView: UIView {
         case .letters:     return KeyboardPages.letterPage(shift: shift, chinese: chinesePunctuation)
         case .symbols:     return KeyboardPages.symbolPage(chinese: chinesePunctuation)
         case .moreSymbols: return KeyboardPages.moreSymbolPage(chinese: chinesePunctuation)
-        case .emoji:       return KeyboardPages.emojiPage()
+        case .emoji:       return KeyboardPages.emojiPage(showInputModeSwitchKey: needsInputModeSwitchKey)
         }
     }
 
