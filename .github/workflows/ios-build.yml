@@ -100,6 +100,7 @@ jobs:
           done
           grep -q "^FRAME READY tab=0$" "$M" \
             || { echo "首帧标记不对，拍的这张图不可信：$(cat "$M" 2>/dev/null || echo 标记没写出来)"; exit 1; }
+          echo "首帧证据：$(cat "$M")"
           sleep 14
           xcrun simctl io "$D" screenshot shot-1-status-empty.png
           ls -lh shot-1-status-empty.png
@@ -162,6 +163,7 @@ jobs:
           done
           grep -q "^FRAME READY tab=1$" "$M" \
             || { echo "首帧标记不对，拍的这张图不可信：$(cat "$M" 2>/dev/null || echo 标记没写出来)"; exit 1; }
+          echo "首帧证据：$(cat "$M")"
           sleep 14
           xcrun simctl io "$D" screenshot shot-3-notch.png
           ls -lh shot-3-notch.png
@@ -202,6 +204,7 @@ jobs:
           done
           grep -q "^FRAME READY tab=2$" "$M" \
             || { echo "首帧标记不对，拍的这张图不可信：$(cat "$M" 2>/dev/null || echo 标记没写出来)"; exit 1; }
+          echo "首帧证据：$(cat "$M")"
           sleep 14
           xcrun simctl io "$D" screenshot shot-4-settings.png
           ls -lh shot-4-settings.png
@@ -245,6 +248,7 @@ jobs:
           done
           grep -q "^FRAME READY tab=3$" "$M" \
             || { echo "首帧标记不对，拍的这张图不可信：$(cat "$M" 2>/dev/null || echo 标记没写出来)"; exit 1; }
+          echo "首帧证据：$(cat "$M")"
           sleep 16
           xcrun simctl io "$D" screenshot shot-5-keyboard.png
           ls -lh shot-5-keyboard.png
