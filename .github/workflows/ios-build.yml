@@ -488,6 +488,33 @@ jobs:
           # 锁屏那两页（实时活动锁屏视图 / 锁屏配件）要手动配置，simctl 到不了，
           # 这里只验灵动岛这一面；剩下两面的截图得真机装包手动看。
 
+      - name: 功能 8 —— 逐个状态截图（App 页面，16 态）
+        run: |
+          set -e
+          # 复用功能 7 那台已经起着实时活动的灵动岛机型，不另开一台。
+          DI=$(xcrun simctl list devices booted | sed -nE 's/.*\(([0-9A-Fa-f-]{36})\) \(Booted\).*/\1/p' | head -1)
+          if [ -z "$DI" ]; then echo "没有已启动的模拟器，功能 7 那步没跑成"; exit 1; fi
+          echo "用设备：$DI"
+          CONT=$(xcrun simctl get_app_container "$DI" com.clawd.island data)
+          # 回到前台，拍 App 自己的页面（这一面画的是 per-state 大图 clawd-<state>）
+          xcrun simctl launch "$DI" com.clawd.island >/dev/null
+          sleep 5
+          bash tools/shot_states.sh "$DI" "$CONT/Documents" app
+          ls -lh state-app-*.png
+
+      - name: 功能 9 —— 逐个状态截图（灵动岛紧凑态，16 态）
+        if: always()
+        run: |
+          set -e
+          DI=$(xcrun simctl list devices booted | sed -nE 's/.*\(([0-9A-Fa-f-]{36})\) \(Booted\).*/\1/p' | head -1)
+          if [ -z "$DI" ]; then echo "没有已启动的模拟器"; exit 1; fi
+          CONT=$(xcrun simctl get_app_container "$DI" com.clawd.island data)
+          # 必须切后台：App 在前台时，灵动岛不显示它自己的实时活动。
+          xcrun simctl launch "$DI" com.apple.Preferences >/dev/null
+          sleep 5
+          bash tools/shot_states.sh "$DI" "$CONT/Documents" di
+          ls -lh state-di-*.png
+
       - name: 失败时抓崩溃日志
         if: failure()
         run: |
