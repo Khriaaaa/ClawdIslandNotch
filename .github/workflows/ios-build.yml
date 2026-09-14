@@ -544,12 +544,45 @@ jobs:
           DI=$(xcrun simctl list devices booted | sed -nE 's/.*\(([0-9A-Fa-f-]{36})\) \(Booted\).*/\1/p' | head -1)
           if [ -z "$DI" ]; then echo "没有已启动的模拟器，功能 7 那步没跑成"; exit 1; fi
           echo "用设备：$DI"
+          # per-state 大图在「状态」页（tab=0）的卡片里，而上一台装的还是功能 5/6 那份
+          # （tab=3，键盘预览页）。直接拍只会拍到键盘页 —— 之前几轮 CI 那 16 张图
+          # 张张都一样，job 却是绿的。这里换回功能 1 用 tab=0 编的那份产物。
+          xcrun simctl terminate "$DI" com.clawd.island || true
+          xcrun simctl install "$DI" build-sim/Build/Products/Debug-iphonesimulator/ClawdIsland.app
           CONT=$(xcrun simctl get_app_container "$DI" com.clawd.island data)
-          # 回到前台，拍 App 自己的页面（这一面画的是 per-state 大图 clawd-<state>）
-          xcrun simctl launch "$DI" com.clawd.island >/dev/null
+          M="$CONT/Documents/frame.txt"
+          rm -f "$M"
+          # CLAWD_SERVER=1：逐个状态靠推送驱动，不打开就没人喂它
+          SIMCTL_CHILD_CLAWD_FRAME_MARKER=1 SIMCTL_CHILD_CLAWD_SERVER=1 \
+            xcrun simctl launch "$DI" com.clawd.island >/dev/null
+          i=0
+          while [ "$i" -lt 40 ]; do
+            if [ -s "$M" ]; then break; fi
+            sleep 1
+            i=$((i + 1))
+          done
+          grep -q "^FRAME READY tab=0$" "$M" \
+            || { echo "装的这份不是状态页（tab=0），拍的图不可信：$(cat "$M" 2>/dev/null)"; exit 1; }
+          echo "首帧证据：$(cat "$M")"
           sleep 5
           bash tools/shot_states.sh "$DI" "$CONT/Documents" app
           ls -lh state-app-*.png
+          # 守卫：16 张得真的不一样。张张雷同就说明又拍成了同一页，不许绿。
+          mkdir -p /tmp/bmp
+          sips -s format bmp state-app-*.png --out /tmp/bmp >/dev/null 2>&1
+          BASE=/tmp/bmp/state-app-01-idle.bmp
+          SAME=0
+          for f in /tmp/bmp/state-app-*.bmp; do
+            D=$(cmp -l "$BASE" "$f" 2>/dev/null | wc -l)
+            if [ "$D" -lt 3000 ]; then
+              SAME=$((SAME + 1))
+              echo "  和第一张几乎一样：$(basename "$f")（差 $D 字节）"
+            fi
+          done
+          if [ "$SAME" -ge 4 ]; then
+            echo "16 态图里有 $SAME 张和第一张几乎没差别 —— 状态没画在图上，这不是真截图"; exit 1
+          fi
+          echo "16 态图差异守卫通过"
 
       - name: 功能 9 —— 逐个状态截图（灵动岛紧凑态，16 态）
         if: always()
@@ -563,6 +596,22 @@ jobs:
           # 改成每轮「拉回前台 → 推 → 等它认下 → 切后台 → 截图」。
           SHOT_BACKGROUND=1 bash tools/shot_states.sh "$DI" "$CONT/Documents" di
           ls -lh state-di-*.png
+          # 守卫：紧凑态也要真变。张张雷同说明岛上压根没换过，不许绿。
+          mkdir -p /tmp/bmpdi
+          sips -s format bmp state-di-*.png --out /tmp/bmpdi >/dev/null 2>&1
+          BASE=/tmp/bmpdi/state-di-01-idle.bmp
+          SAME=0
+          for f in /tmp/bmpdi/state-di-*.bmp; do
+            D=$(cmp -l "$BASE" "$f" 2>/dev/null | wc -l)
+            if [ "$D" -lt 3000 ]; then
+              SAME=$((SAME + 1))
+              echo "  和第一张几乎一样：$(basename "$f")（差 $D 字节）"
+            fi
+          done
+          if [ "$SAME" -ge 4 ]; then
+            echo "灵动岛紧凑态里有 $SAME 张和第一张几乎没差别 —— 岛上没换过内容"; exit 1
+          fi
+          echo "灵动岛紧凑态差异守卫通过"
 
       - name: 失败时抓崩溃日志
         if: failure()
