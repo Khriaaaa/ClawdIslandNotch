@@ -246,6 +246,53 @@ jobs:
           if grep -q "^SELFTEST FAIL" "$F"; then echo "自检报了 FAIL"; exit 1; fi
           grep -q "^SELFTEST VERDICT PASS$" "$F" || { echo "自检没给出 PASS 终判"; exit 1; }
 
+      - name: 功能 7 —— 灵动岛实时活动（另开一台灵动岛机型）
+        run: |
+          set -e
+          # 前面几台都特意选刘海机（NotchGeometry 要），灵动岛得另找一台。
+          LIST=$(xcrun simctl list devices available)
+          DI=""
+          for NAME in "iPhone 16 Pro" "iPhone 15 Pro" "iPhone 16 Pro Max" "iPhone 15 Pro Max"; do
+            LINE=$(echo "$LIST" | grep -m1 "$NAME (" || true)
+            if [ -n "$LINE" ]; then
+              DI=$(echo "$LINE" | sed -E 's/.*\(([0-9A-Fa-f-]{36})\).*/\1/')
+              echo "灵动岛机型：$NAME -> $DI"
+              break
+            fi
+          done
+          if [ -z "$DI" ]; then echo "runner 上没有灵动岛机型，这步验不了"; exit 1; fi
+          xcrun simctl boot "$DI" || true
+          xcrun simctl bootstatus "$DI" -b
+          xcrun simctl uninstall "$DI" com.clawd.island || true
+          xcrun simctl install "$DI" build-sim-kb/Build/Products/Debug-iphonesimulator/ClawdIsland.app
+          CONT=$(xcrun simctl get_app_container "$DI" com.clawd.island data)
+          M="$CONT/Documents/live-activity.txt"
+          rm -f "$M"
+          SIMCTL_CHILD_CLAWD_LA_MARKER=1 xcrun simctl launch "$DI" com.clawd.island || echo "launch 失败"
+          # 实时活动起没起来由 App 写出来，不靠看图猜。等不到就是没起来，直接红。
+          i=0
+          while [ "$i" -lt 40 ]; do
+            if [ -s "$M" ]; then break; fi
+            sleep 1
+            i=$((i + 1))
+          done
+          echo "=== 实时活动标记 ==="
+          cat "$M" || { echo "标记没写出来：App 没起，或 Activity.request 卡住了"; exit 1; }
+          grep -q "^LIVEACTIVITY ACTIVE" "$M" || { echo "实时活动没起来，灵动岛上不会有东西"; exit 1; }
+          # 推一条「干活中」，让岛上显示的是有内容的状态而不是默认空态
+          python3 tools/send_state.py --host 127.0.0.1 --state working --event PreToolUse \
+            --agent-id openclaw --hook-source send_state.py \
+            --session-id sess-ci-la --session-title "重构支付模块" \
+            --cwd "/Users/dev/pay" --tool-name "Bash" --tool-use-id toolu_ci_la || echo "推送失败（不影响截图）"
+          sleep 5
+          # 把 App 送到后台，灵动岛才会显示实时活动的紧凑态（前台时岛上不显示自己的活动）
+          xcrun simctl launch "$DI" com.apple.Preferences || echo "切后台失败"
+          sleep 6
+          xcrun simctl io "$DI" screenshot shot-8-live-activity.png
+          ls -lh shot-8-live-activity.png
+          # 锁屏那两页（实时活动锁屏视图 / 锁屏配件）要手动配置，simctl 到不了，
+          # 这里只验灵动岛这一面；剩下两面的截图得真机装包手动看。
+
       - name: 失败时抓崩溃日志
         if: failure()
         run: |

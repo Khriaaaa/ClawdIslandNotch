@@ -12,13 +12,43 @@ struct ClawdIslandApp: App {
                 .environmentObject(coordinator)
                 .environmentObject(coordinator.server)
                 .environmentObject(coordinator.activities)
-                .onAppear { coordinator.bootstrap() }
+                .onAppear {
+                    coordinator.bootstrap()
+                    // CI 用：实时活动起没起来，光看一张静止截图判不了，也没法问系统。
+                    // 打开 CLAWD_LA_MARKER=1 就让 App 把结果写进 Documents，CI 读它判定 ——
+                    // 起不来的话这一步直接红，不会「图看着像那么回事、job 却是绿的」。
+                    // 延迟 3 秒：bootstrap 之后每秒还有一次 tick 兜底，等它走完再判。
+                    if ProcessInfo.processInfo.environment["CLAWD_LA_MARKER"] == "1" {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                            Self.writeLiveActivityMarker(coordinator.activities)
+                        }
+                    }
+                }
                 .onChange(of: scenePhase) { _, phase in
                     // 回到前台时重读 App Group：Widget 的交互按钮可能已经改过状态。
                     if phase == .active {
                         coordinator.reloadFromStore()
                     }
                 }
+        }
+    }
+}
+
+extension ClawdIslandApp {
+    /// 把「实时活动到底起没起来」写进 Documents 给 CI 读。
+    /// 写不进去不吞错 —— 吞了以后错的是图、绿的是 job。
+    static func writeLiveActivityMarker(_ activities: ActivityController) {
+        guard let docs = FileManager.default.urls(for: .documentDirectory,
+                                                  in: .userDomainMask).first else { return }
+        try? FileManager.default.createDirectory(at: docs, withIntermediateDirectories: true)
+        let line = activities.isActive
+            ? "LIVEACTIVITY ACTIVE"
+            : "LIVEACTIVITY INACTIVE \(activities.lastError ?? "没有错误信息")"
+        do {
+            try line.write(to: docs.appendingPathComponent("live-activity.txt"),
+                           atomically: true, encoding: .utf8)
+        } catch {
+            NSLog("实时活动标记写入失败：\(error)")
         }
     }
 }
