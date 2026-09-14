@@ -552,8 +552,17 @@ jobs:
           CONT=$(xcrun simctl get_app_container "$DI" com.clawd.island data)
           M="$CONT/Documents/frame.txt"
           rm -f "$M"
-          # CLAWD_SERVER=1：逐个状态靠推送驱动，不打开就没人喂它
+          # 三个开关缺一不可：
+          #   FRAME_MARKER —— 让 App 写出「现在停在哪个 tab」，证明装的是状态页
+          #   SERVER       —— 打开推送端口，逐态截图全靠推
+          #   LA_MARKER    —— 让 Diag 写 la-applied.txt，shot_states.sh 靠它判断
+          #                   「这一条真的被 ActivityKit 收下了」
+          # 漏掉 LA_MARKER 的后果：terminate+install 之后是个全新进程，不再继承
+          # 功能 7 那份环境，一个标记都不写 —— 16 态全等 15s 超时，日志看着像
+          # 「状态没生效」，其实界面上真的换了（截图两两不同）。上一版没
+          # terminate 才侥幸能写，改完必须自己带上。
           SIMCTL_CHILD_CLAWD_FRAME_MARKER=1 SIMCTL_CHILD_CLAWD_SERVER=1 \
+            SIMCTL_CHILD_CLAWD_LA_MARKER=1 \
             xcrun simctl launch "$DI" com.clawd.island >/dev/null
           i=0
           while [ "$i" -lt 40 ]; do
