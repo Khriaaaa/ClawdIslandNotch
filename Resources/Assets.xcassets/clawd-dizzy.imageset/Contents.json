@@ -1,15 +1,12 @@
 {
-  "images" : [
+  "images": [
     {
-      "filename" : "clawd-dizzy.svg",
-      "idiom" : "universal"
+      "filename": "clawd-dizzy.png",
+      "idiom": "universal"
     }
   ],
-  "info" : {
-    "author" : "xcode",
-    "version" : 1
-  },
-  "properties" : {
-    "preserves-vector-representation" : true
+  "info": {
+    "author": "xcode",
+    "version": 1
   }
 }

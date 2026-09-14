@@ -1,15 +1,12 @@
 {
-  "images" : [
+  "images": [
     {
-      "filename" : "clawd-mini-crabwalk.svg",
-      "idiom" : "universal"
+      "filename": "clawd-mini-crabwalk.png",
+      "idiom": "universal"
     }
   ],
-  "info" : {
-    "author" : "xcode",
-    "version" : 1
-  },
-  "properties" : {
-    "preserves-vector-representation" : true
+  "info": {
+    "author": "xcode",
+    "version": 1
   }
 }
